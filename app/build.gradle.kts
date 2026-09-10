@@ -25,10 +25,13 @@ android {
         create("release") {
             val keyFile = file("${rootProject.projectDir}/keystore/release-key.jks")
             if (keyFile.exists()) {
+                val pass = project.findProperty("KEYSTORE_PASS") as? String 
+                    ?: System.getenv("KEYSTORE_PASS") 
+                    ?: "wifi1234"
                 storeFile = keyFile
-                storePassword = "wifi1234"
+                storePassword = pass
                 keyAlias = "wifiautologin"
-                keyPassword = "wifi1234"
+                keyPassword = pass
                 enableV1Signing = true
                 enableV2Signing = true
                 enableV3Signing = true
