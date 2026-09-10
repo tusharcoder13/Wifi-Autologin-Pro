@@ -1,0 +1,11 @@
+<resources>
+    <string name="app_name">WiFi AutoLogin Pro</string>
+    <string name="tile_label">WiFi AutoLogin</string>
+    <string name="notification_channel_name">WiFi Auto-Login Service</string>
+    <string name="notification_channel_desc">Monitors Wi-Fi and executes background captive portal auto-login.</string>
+    <string name="notification_title">WiFi AutoLogin Active</string>
+    <string name="notification_text">Monitoring Wi-Fi networks for captive portal auto-login</string>
+    <string name="login_success">Logged in successfully to %1$s</string>
+    <string name="login_failed">Login failed for %1$s: %2$s</string>
+    <string name="accessibility_service_description">Automatically fills your saved Wi-Fi username and password on captive portal login web pages and system dialogs.</string>
+</resources>
