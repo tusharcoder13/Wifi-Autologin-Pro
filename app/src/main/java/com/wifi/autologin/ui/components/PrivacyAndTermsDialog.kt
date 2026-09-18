@@ -99,7 +99,7 @@ fun PrivacyPolicyDialog(onDismiss: () -> Unit) {
 
                     PolicySection(
                         title = "3. Permissions & Why We Need Them",
-                        content = "• Location (GPS): Required exclusively by Android OS security policy to read the local broadcast name (SSID: e.g. KU-ROOM_31). The app NEVER tracks, logs, or transmits your GPS coordinates.\n\n• Notifications: Used strictly to provide local status alerts (e.g. 5-second connection confirmations and keep-alive status).\n\n• Accessibility Service (Optional): Used solely to detect captive portal login pages in mobile browsers and insert your saved credentials into username/password inputs. It strictly ignores all banking, payment (UPI/Navi/PhonePe), messaging, and public websites (Google Forms, social media)."
+                        content = "• Location (GPS): Required exclusively by Android OS security policy to read the local broadcast name (SSID: e.g. KU-ROOM_31). The app NEVER tracks, logs, or transmits your GPS coordinates.\n\n• Notifications: Used strictly to provide local status alerts (e.g. 5-second connection confirmations and keep-alive status)."
                     )
 
                     PolicySection(

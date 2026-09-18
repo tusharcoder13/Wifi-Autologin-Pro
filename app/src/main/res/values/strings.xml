@@ -7,5 +7,4 @@
     <string name="notification_text">Monitoring Wi-Fi networks for captive portal auto-login</string>
     <string name="login_success">Logged in successfully to %1$s</string>
     <string name="login_failed">Login failed for %1$s: %2$s</string>
-    <string name="accessibility_service_description">Automatically fills your saved Wi-Fi username and password on captive portal login web pages and system dialogs.</string>
 </resources>
