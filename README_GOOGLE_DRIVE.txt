@@ -1,0 +1,61 @@
+﻿===================================================================
+             📶 WiFi AutoLogin Pro - Official APK
+   Instant, 100% Hands-Free Campus Wi-Fi Auto-Login
+===================================================================
+
+👋 Welcome! 
+Tired of typing your roll number and password every time you connect to campus Wi-Fi? 
+WiFi AutoLogin Pro automatically logs you in the moment you connect (<300ms) — without opening a browser or tapping any buttons!
+
+-------------------------------------------------------------------
+🛡️ IS THIS APP SAFE? (100% Privacy Guarantee)
+-------------------------------------------------------------------
+Many people worry when downloading an APK directly. Here is why you can trust it:
+
+✅ 100% Open-Source: 
+   The complete code is public and open for anyone to inspect on GitHub:
+   👉 https://github.com/tusharcoder13/Wifi-Autologin-Pro
+
+✅ 100% Private: 
+   Your username and password stay only on your phone. Nothing is uploaded or shared online.
+
+✅ Zero Ads & No Tracking: 
+   There are no ads, no trackers, and no background data collection.
+
+✅ Lightweight & Battery Friendly: 
+   Uses almost 0% battery and runs for just a split second when connecting to Wi-Fi.
+
+-------------------------------------------------------------------
+📲 QUICK 1-MINUTE SETUP GUIDE
+-------------------------------------------------------------------
+
+STEP 1: Download & Install
+• Download "WiFi_AutoLogin_Pro.apk" from this folder.
+• Tap the file to install it.
+  *(Note: If Android shows "File might be harmful", tap "Download anyway" / "Allow from this source". This is just a standard Android message for files downloaded outside the Play Store).*
+
+STEP 2: Grant Permissions (First-time only)
+• Open the app.
+• Allow "Location" permission (Needed by Android so the app can read the Wi-Fi name).
+• Allow "Notifications" (To show quick connection confirmations).
+
+STEP 3: Add Your Profile
+• Go to the "Profiles" tab (or tap "+ Add Profile").
+• Enter your Campus Username (Roll No.) and Password.
+• Tap "Save Profile".
+
+STEP 4: You're All Set! 🚀
+• Turn ON Wi-Fi and connect to campus Wi-Fi.
+• The app will automatically log you in within <300ms!
+
+-------------------------------------------------------------------
+💡 MULTI-ACCOUNT SUPPORT:
+-------------------------------------------------------------------
+Hit your device limit? You can add backup accounts (e.g. roommate's login). If your main account is full, the app will automatically switch to the backup account.
+
+-------------------------------------------------------------------
+👨‍💻 Developer & Project Details:
+Developed with ❤️ for students & staff by Tushar Sahu.
+• GitHub: https://github.com/tusharcoder13/Wifi-Autologin-Pro
+• LinkedIn: https://www.linkedin.com/in/tusharsahu13
+===================================================================
