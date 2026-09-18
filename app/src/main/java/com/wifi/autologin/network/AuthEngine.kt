@@ -44,10 +44,15 @@ class AuthEngine(
     }
 
     private fun getHttpClient(bypassSsl: Boolean): OkHttpClient {
+        val dispatcher = Dispatcher().apply {
+            maxRequests = 64
+            maxRequestsPerHost = 16
+        }
         val builder = OkHttpClient.Builder()
+            .dispatcher(dispatcher)
             .cookieJar(cookieJar)
-            .connectTimeout(2000, TimeUnit.MILLISECONDS)
-            .readTimeout(2000, TimeUnit.MILLISECONDS)
+            .connectTimeout(1200, TimeUnit.MILLISECONDS)
+            .readTimeout(1200, TimeUnit.MILLISECONDS)
             .followRedirects(true)
             .followSslRedirects(true)
 
@@ -91,7 +96,8 @@ class AuthEngine(
     }
 
     /**
-     * Executes parallel login combining live dynamic wire discovery + campus server clusters.
+     * Executes lightning-fast parallel login combining immediate subnet/gateway/campus endpoints
+     * with live dynamic wire discovery.
      */
     suspend fun executeLogin(profile: WifiProfile): AuthResult = withContext(Dispatchers.IO) {
         val settings = appSettingsRepository.settings.value
@@ -99,30 +105,12 @@ class AuthEngine(
 
         val client = getHttpClient(settings.bypassSslErrors)
         val gateway = detector.getGatewayIpAddress()
-
+        val currentIp = detector.getCurrentIpAddress()
         val cleanProfile = profile
 
-        // 1. DYNAMIC DISCOVERY: Live probe interrogation to capture exact portal address on the wire
-        val probeResult = detector.probeConnectivity(settings.customProbeUrl, settings.bypassSslErrors)
-        val discoveredPortal = probeResult.portalUrl.trim()
-
-        val discoveredHost = try {
-            if (discoveredPortal.isNotBlank() && discoveredPortal.startsWith("http")) {
-                val uri = URI(discoveredPortal)
-                uri.host ?: ""
-            } else {
-                ""
-            }
-        } catch (e: Exception) {
-            ""
-        }
-
-        LogRepository.info("Portal Discovery", "Dynamically discovered portal: '$discoveredPortal' (Host: '$discoveredHost', Gateway: '$gateway')")
-
-        // 2. Build target URLs dynamically based on live discovered endpoints + campus servers
+        // 1. Build immediate target list
         val dynamicTargets = mutableListOf<String>()
 
-        // Helper to add both http and https for an endpoint host/path
         fun addHostEndpoints(host: String) {
             if (host.isBlank()) return
             val cleanHost = host.removePrefix("http://").removePrefix("https://").split("/").firstOrNull() ?: host
@@ -143,30 +131,12 @@ class AuthEngine(
             }
         }
 
-        // Add the exact live intercepted URL
-        if (discoveredPortal.isNotBlank() && discoveredPortal.startsWith("http")) {
-            dynamicTargets.add(discoveredPortal)
-            val clean = discoveredPortal.split("?").firstOrNull() ?: discoveredPortal
-            if (!clean.endsWith("/httpclient.html")) {
-                dynamicTargets.add(clean.trimEnd('/') + "/httpclient.html")
-            }
-            if (!clean.endsWith("/login.xml")) {
-                dynamicTargets.add(clean.trimEnd('/') + "/login.xml")
-            }
-        }
-
-        // Add dynamically discovered host endpoints
-        if (discoveredHost.isNotBlank()) {
-            addHostEndpoints(discoveredHost)
-        }
-
-        // Add active DHCP gateway endpoints
+        // Active DHCP gateway
         if (gateway.isNotBlank() && gateway != "0.0.0.0" && gateway != "127.0.0.1") {
             addHostEndpoints(gateway)
         }
 
-        // Dynamically derive subnet gateway from local IP (e.g. 172.24.31.x -> 172.24.31.1)
-        val currentIp = detector.getCurrentIpAddress()
+        // Derived subnet gateway
         if (currentIp.isNotBlank() && currentIp != "0.0.0.0") {
             val parts = currentIp.split(".")
             if (parts.size == 4) {
@@ -175,123 +145,147 @@ class AuthEngine(
             }
         }
 
-        // Add known Kalinga campus room gateway clusters (172.24.16.1, 172.24.64.1, 172.24.31.1, 172.24.17.1, 172.24.8.1, 172.24.1.1)
+        // Campus server clusters
         listOf("172.24.16.1", "172.24.64.1", "172.24.31.1", "172.24.17.1", "172.24.8.1", "172.24.1.1").forEach { gw ->
             addHostEndpoints(gw)
         }
 
-        // Add user-saved profile portal URL if provided
+        // Profile custom portal URL
         if (profile.portalUrl.isNotBlank() && profile.portalUrl.startsWith("http")) {
             dynamicTargets.add(profile.portalUrl)
+            val clean = profile.portalUrl.split("?").firstOrNull() ?: profile.portalUrl
+            if (!clean.endsWith("/httpclient.html")) dynamicTargets.add(clean.trimEnd('/') + "/httpclient.html")
+            if (!clean.endsWith("/login.xml")) dynamicTargets.add(clean.trimEnd('/') + "/login.xml")
         }
 
         val distinctUrls = dynamicTargets.distinct()
-        LogRepository.info("Target Endpoints", "Dispatching parallel authentication to: $distinctUrls")
+        LogRepository.info("Target Endpoints", "Dispatching instant parallel auth to ${distinctUrls.size} endpoints...")
 
-        // 3. FAST PATH: Parallel Direct Socket POST to all target endpoints
-        val results = coroutineScope {
-            distinctUrls.map { url ->
-                async(Dispatchers.IO) {
-                    try {
-                        val formBody = FormBody.Builder()
-                            .add("mode", "191")
-                            .add("username", cleanProfile.username.trim())
-                            .add("password", cleanProfile.password.trim())
-                            .add("a", System.currentTimeMillis().toString())
-                            .add("producttype", "0")
-                            .add("saveinfo", "1")
-                            .add("popup", "0")
-                            .add("dst", "http://connectivitycheck.gstatic.com/generate_204")
-                            .build()
+        // Function to perform single direct POST
+        suspend fun postToUrl(url: String): AuthResult? = withContext(Dispatchers.IO) {
+            try {
+                val formBody = FormBody.Builder()
+                    .add("mode", "191")
+                    .add("username", cleanProfile.username.trim())
+                    .add("password", cleanProfile.password.trim())
+                    .add("a", System.currentTimeMillis().toString())
+                    .add("producttype", "0")
+                    .add("saveinfo", "1")
+                    .add("popup", "0")
+                    .add("dst", "http://connectivitycheck.gstatic.com/generate_204")
+                    .build()
 
-                        val req = Request.Builder()
-                            .url(url)
-                            .post(formBody)
-                            .header("User-Agent", "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36")
-                            .header("Referer", url)
-                            .header("Origin", url.split("/").take(3).joinToString("/"))
-                            .build()
+                val req = Request.Builder()
+                    .url(url)
+                    .post(formBody)
+                    .header("User-Agent", "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36")
+                    .header("Referer", url)
+                    .header("Origin", url.split("/").take(3).joinToString("/"))
+                    .build()
 
-                        val resp = client.newCall(req).execute()
-                        val body = resp.body?.string() ?: ""
-                        val snippet = if (body.length > 100) body.take(100).replace("\n", " ").trim() else body.trim()
-                        LogRepository.info("Direct POST", "POST $url -> HTTP ${resp.code}: $snippet")
+                val resp = client.newCall(req).execute()
+                val body = resp.body?.string() ?: ""
+                val snippet = if (body.length > 100) body.take(100).replace("\n", " ").trim() else body.trim()
+                LogRepository.info("Direct POST", "POST $url -> HTTP ${resp.code}: $snippet")
 
-                        // Extract status and message from XML / HTML response
-                        val messageMatch = Regex("<message>(?:<!\\[CDATA\\[)?(.*?)(?:\\]\\]>)?<\\/message>", RegexOption.IGNORE_CASE).find(body)
-                        val messageVal = messageMatch?.groupValues?.get(1)?.trim() ?: ""
+                val messageMatch = Regex("<message>(?:<!\\[CDATA\\[)?(.*?)(?:\\]\\]>)?<\\/message>", RegexOption.IGNORE_CASE).find(body)
+                val messageVal = messageMatch?.groupValues?.get(1)?.trim() ?: ""
 
-                        val isExplicitFailure = messageVal.contains("could not log you on", ignoreCase = true) ||
-                                messageVal.contains("incorrect", ignoreCase = true) ||
-                                messageVal.contains("limit reached", ignoreCase = true) ||
-                                messageVal.contains("exceeded", ignoreCase = true) ||
-                                messageVal.contains("failed", ignoreCase = true) ||
-                                messageVal.contains("denied", ignoreCase = true) ||
-                                messageVal.contains("another ip", ignoreCase = true) ||
-                                messageVal.contains("another device", ignoreCase = true) ||
-                                messageVal.contains("different ip", ignoreCase = true) ||
-                                messageVal.contains("maximum", ignoreCase = true)
+                val isExplicitFailure = messageVal.contains("could not log you on", ignoreCase = true) ||
+                        messageVal.contains("incorrect", ignoreCase = true) ||
+                        messageVal.contains("limit reached", ignoreCase = true) ||
+                        messageVal.contains("exceeded", ignoreCase = true) ||
+                        messageVal.contains("failed", ignoreCase = true) ||
+                        messageVal.contains("denied", ignoreCase = true) ||
+                        messageVal.contains("another ip", ignoreCase = true) ||
+                        messageVal.contains("another device", ignoreCase = true) ||
+                        messageVal.contains("different ip", ignoreCase = true) ||
+                        messageVal.contains("maximum", ignoreCase = true)
 
-                        val isExplicitSuccess = messageVal.contains("successfully", ignoreCase = true) ||
-                                messageVal.contains("already logged in", ignoreCase = true) ||
-                                messageVal.contains("success", ignoreCase = true) ||
-                                body.contains("<ack>ACK</ack>", ignoreCase = true) ||
-                                body.contains("successfully signed in", ignoreCase = true) ||
-                                body.contains("successfully logged in", ignoreCase = true) ||
-                                body.contains("status=1", ignoreCase = true) ||
-                                (body.contains("<status><![CDATA[LOGIN]]></status>", ignoreCase = true) && !isExplicitFailure) ||
-                                (body.contains("<status><![CDATA[LIVE]]></status>", ignoreCase = true) && !isExplicitFailure) ||
-                                (body.contains("<status><![CDATA[SUCCESS]]></status>", ignoreCase = true) && !isExplicitFailure)
+                val isExplicitSuccess = messageVal.contains("successfully", ignoreCase = true) ||
+                        messageVal.contains("already logged in", ignoreCase = true) ||
+                        messageVal.contains("success", ignoreCase = true) ||
+                        body.contains("<ack>ACK</ack>", ignoreCase = true) ||
+                        body.contains("successfully signed in", ignoreCase = true) ||
+                        body.contains("successfully logged in", ignoreCase = true) ||
+                        body.contains("status=1", ignoreCase = true) ||
+                        (body.contains("<status><![CDATA[LOGIN]]></status>", ignoreCase = true) && !isExplicitFailure) ||
+                        (body.contains("<status><![CDATA[LIVE]]></status>", ignoreCase = true) && !isExplicitFailure) ||
+                        (body.contains("<status><![CDATA[SUCCESS]]></status>", ignoreCase = true) && !isExplicitFailure)
 
-                        if (isExplicitSuccess && !isExplicitFailure) {
-                            val msg = if (messageVal.isNotBlank()) messageVal else "Instant login verified!"
-                            AuthResult(isSuccess = true, httpCode = resp.code, message = msg, portalTargetUrl = url)
-                        } else if (isExplicitFailure) {
-                            val formattedMsg = formatLoginErrorMessage(messageVal, cleanProfile.username)
-                            LogRepository.warning("Auth Response", formattedMsg)
-                            AuthResult(isSuccess = false, httpCode = resp.code, message = formattedMsg, portalTargetUrl = url)
-                        } else {
-                            null
-                        }
-                    } catch (e: Exception) {
-                        null
-                    }
+                if (isExplicitSuccess && !isExplicitFailure) {
+                    val msg = if (messageVal.isNotBlank()) messageVal else "Instant login verified!"
+                    AuthResult(isSuccess = true, httpCode = resp.code, message = msg, portalTargetUrl = url)
+                } else if (isExplicitFailure) {
+                    val formattedMsg = formatLoginErrorMessage(messageVal, cleanProfile.username)
+                    LogRepository.warning("Auth Response", formattedMsg)
+                    AuthResult(isSuccess = false, httpCode = resp.code, message = formattedMsg, portalTargetUrl = url)
+                } else {
+                    null
                 }
-            }.awaitAll()
+            } catch (e: Exception) {
+                null
+            }
         }
 
-        val successfulResult = results.filterNotNull().firstOrNull { it.isSuccess }
+        // Fire all direct POSTs in parallel
+        val authDeferreds = distinctUrls.map { url ->
+            async(Dispatchers.IO) { postToUrl(url) }
+        }
+
+        // Also run dynamic wire probe in parallel
+        val probeDeferred = async(Dispatchers.IO) {
+            try {
+                val pResult = detector.probeConnectivity(settings.customProbeUrl, settings.bypassSslErrors)
+                val discovered = pResult.portalUrl.trim()
+                if (discovered.isNotBlank() && discovered.startsWith("http") && !distinctUrls.contains(discovered)) {
+                    LogRepository.info("Discovered Wire Target", "Found target from probe: $discovered")
+                    postToUrl(discovered)
+                } else {
+                    null
+                }
+            } catch (e: Exception) {
+                null
+            }
+        }
+
+        val allResults = (authDeferreds + probeDeferred).awaitAll().filterNotNull()
+
+        val successfulResult = allResults.firstOrNull { it.isSuccess }
         if (successfulResult != null) {
             detector.forceDismissCaptivePortalNotification()
+            detector.blastSocket204Probes()
             LogRepository.success("Hands-Free Success", "Instant login verified on ${successfulResult.portalTargetUrl}!")
             return@withContext successfulResult
         }
 
-        val explicitFailure = results.filterNotNull().firstOrNull { !it.isSuccess && it.message.isNotBlank() }
+        val explicitFailure = allResults.firstOrNull { !it.isSuccess && it.message.isNotBlank() }
         if (explicitFailure != null) {
             return@withContext explicitFailure
         }
 
-        // Fast probe check (300ms)
-        delay(300)
+        // Fast probe check (100ms)
+        delay(100)
         val probe = detector.probeConnectivity(settings.customProbeUrl, settings.bypassSslErrors)
         if (probe.state == WifiState.CONNECTED_ONLINE && probe.httpCode == 204) {
+            detector.forceDismissCaptivePortalNotification()
+            detector.blastSocket204Probes()
             LogRepository.success("Hands-Free Success", "Internet unblocked successfully!")
             return@withContext AuthResult(isSuccess = true, httpCode = 204, message = "Internet verified online.")
         }
 
-        // 4. SECONDARY PATH: Headless WebKit Browser Engine targeting dynamically discovered URL
-        val targetBrowserUrl = if (discoveredPortal.isNotBlank() && discoveredPortal.startsWith("http")) {
-            discoveredPortal
-        } else if (discoveredHost.isNotBlank()) {
-            "http://$discoveredHost:8090/httpclient.html"
-        } else {
+        // 4. SECONDARY PATH: Headless WebKit Browser Engine targeting discovered/default URL
+        val targetBrowserUrl = if (gateway.isNotBlank() && gateway != "0.0.0.0") {
             "http://$gateway:8090/httpclient.html"
+        } else {
+            "http://172.24.16.1:8090/httpclient.html"
         }
 
         LogRepository.info("Auto-Engine", "Cascading to Headless WebKit Engine on '$targetBrowserUrl' for ${cleanProfile.username}...")
         val webResult = WebViewLoginEngine.executeHeadlessLogin(context, cleanProfile, detector, targetBrowserUrl)
         if (webResult.isSuccess) {
+            detector.forceDismissCaptivePortalNotification()
+            detector.blastSocket204Probes()
             return@withContext webResult
         }
 

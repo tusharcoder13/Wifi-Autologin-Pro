@@ -58,8 +58,8 @@ class CaptivePortalDetector(private val context: Context) {
      */
     private fun createProbeClient(followRedirects: Boolean = false, bypassSsl: Boolean = true): OkHttpClient {
         val builder = OkHttpClient.Builder()
-            .connectTimeout(3, TimeUnit.SECONDS)
-            .readTimeout(3, TimeUnit.SECONDS)
+            .connectTimeout(1500, TimeUnit.MILLISECONDS)
+            .readTimeout(1500, TimeUnit.MILLISECONDS)
             .followRedirects(followRedirects)
             .followSslRedirects(followRedirects)
 
@@ -447,10 +447,54 @@ class CaptivePortalDetector(private val context: Context) {
                 for (wifiNet in wifiNets) {
                     try {
                         connectivityManager.bindProcessToNetwork(wifiNet)
+                        // Trigger immediate re-evaluation in Android OS NetworkMonitor
+                        connectivityManager.reportNetworkConnectivity(wifiNet, false)
                         connectivityManager.reportNetworkConnectivity(wifiNet, true)
                     } catch (e: Exception) {
                         // Ignore
                     }
+                }
+            }
+        } catch (e: Exception) {
+            // Ignore
+        }
+    }
+
+    /**
+     * Blasts direct non-blocking HTTP 204 requests over the Wi-Fi physical socket
+     * to immediately satisfy Android's kernel and socket-level verification.
+     */
+    fun blastSocket204Probes() {
+        try {
+            val wifiNet = getPrimaryWifiNetwork() ?: return
+            val client = OkHttpClient.Builder()
+                .connectTimeout(1, TimeUnit.SECONDS)
+                .readTimeout(1, TimeUnit.SECONDS)
+                .socketFactory(wifiNet.socketFactory)
+                .followRedirects(false)
+                .build()
+
+            val urls = listOf(
+                "http://connectivitycheck.gstatic.com/generate_204",
+                "http://www.google.com/generate_204",
+                "http://play.googleapis.com/generate_204",
+                "http://gstatic.com/generate_204"
+            )
+
+            for (url in urls) {
+                try {
+                    val req = Request.Builder()
+                        .url(url)
+                        .header("Cache-Control", "no-cache")
+                        .build()
+                    client.newCall(req).enqueue(object : okhttp3.Callback {
+                        override fun onFailure(call: okhttp3.Call, e: IOException) {}
+                        override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
+                            response.close()
+                        }
+                    })
+                } catch (e: Exception) {
+                    // Ignore
                 }
             }
         } catch (e: Exception) {

@@ -100,7 +100,7 @@ class WifiMonitorService : Service() {
         // Immediate check if Wi-Fi is already active upon service startup
         val wifiNet = detector.getPrimaryWifiNetwork()
         if (wifiNet != null) {
-            bindNetworkAndTrigger(wifiNet)
+            bindNetworkAndTrigger(wifiNet, isCaptiveHint = false)
         }
     }
 
@@ -109,9 +109,9 @@ class WifiMonitorService : Service() {
         serviceScope.launch {
             val wifiNet = detector.getPrimaryWifiNetwork()
             if (wifiNet != null) {
-                bindNetworkAndTrigger(wifiNet)
+                bindNetworkAndTrigger(wifiNet, isCaptiveHint = (action == ACTION_MANUAL_LOGIN))
             } else {
-                triggerAutoLoginForCurrentWifi(isManual = (action == ACTION_MANUAL_LOGIN))
+                triggerAutoLoginForCurrentWifi(isManual = (action == ACTION_MANUAL_LOGIN), isKnownCaptive = false)
             }
         }
         return START_STICKY
@@ -133,7 +133,7 @@ class WifiMonitorService : Service() {
             override fun onAvailable(network: Network) {
                 LogRepository.info("Wi-Fi Connected", "Detected Wi-Fi network interface.")
                 extractSsidFromNetwork(network)
-                bindNetworkAndTrigger(network)
+                bindNetworkAndTrigger(network, isCaptiveHint = false)
             }
 
             override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
@@ -145,7 +145,7 @@ class WifiMonitorService : Service() {
 
                 if (hasCaptive) {
                     LogRepository.warning("Captive Detected", "OS detected captive portal lock on $currentSsid.")
-                    bindNetworkAndTrigger(network)
+                    bindNetworkAndTrigger(network, isCaptiveHint = true)
                 } else if (isValidated) {
                     LogRepository.success("Network Validated", "Android OS confirmed full internet access on $currentSsid (Icon verified).")
                 }
@@ -155,7 +155,7 @@ class WifiMonitorService : Service() {
                 CaptivePortalDetector.latestSsid = ""
                 lastNotifiedSuccessNetwork = null
                 LogRepository.info("Wi-Fi Lost", "Disconnected from Wi-Fi.")
-                updateNotification("Waiting for Wi-Fi connection...")
+                updateNotification("Monitoring Wi-Fi networks in background...")
             }
         }
 
@@ -169,19 +169,20 @@ class WifiMonitorService : Service() {
                 val fallbackHandler = object : ConnectivityManager.NetworkCallback() {
                     override fun onAvailable(network: Network) {
                         extractSsidFromNetwork(network)
-                        bindNetworkAndTrigger(network)
+                        bindNetworkAndTrigger(network, isCaptiveHint = false)
                     }
 
                     override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
                         extractSsidFromCapabilities(capabilities)
                         val hasCaptive = capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_CAPTIVE_PORTAL)
                         if (hasCaptive) {
-                            bindNetworkAndTrigger(network)
+                            bindNetworkAndTrigger(network, isCaptiveHint = true)
                         }
                     }
 
                     override fun onLost(network: Network) {
                         CaptivePortalDetector.latestSsid = ""
+                        updateNotification("Monitoring Wi-Fi networks in background...")
                     }
                 }
                 networkCallback = fallbackHandler
@@ -255,7 +256,7 @@ class WifiMonitorService : Service() {
 
                         val wifiNet = detector.getPrimaryWifiNetwork()
                         if (wifiNet != null) {
-                            bindNetworkAndTrigger(wifiNet)
+                            bindNetworkAndTrigger(wifiNet, isCaptiveHint = false)
                         }
                     } catch (e: Exception) {
                         // Ignore
@@ -275,7 +276,7 @@ class WifiMonitorService : Service() {
 
     private var loginTriggerJob: Job? = null
 
-    private fun bindNetworkAndTrigger(network: Network) {
+    private fun bindNetworkAndTrigger(network: Network, isCaptiveHint: Boolean = false) {
         val caps = connectivityManager.getNetworkCapabilities(network)
         if (caps == null || !caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
             return
@@ -289,15 +290,16 @@ class WifiMonitorService : Service() {
             // Ignore
         }
 
-        // Debounce rapid-fire Android OS network events into 1 single unified trigger
+        // Fast debounce: 20ms for explicit captive hints, 80ms for general connection
+        val delayTime = if (isCaptiveHint) 20L else 80L
         loginTriggerJob?.cancel()
         loginTriggerJob = serviceScope.launch {
-            delay(400)
-            triggerAutoLoginForCurrentWifi(isManual = false)
+            delay(delayTime)
+            triggerAutoLoginForCurrentWifi(isManual = false, isKnownCaptive = isCaptiveHint)
         }
     }
 
-    private suspend fun triggerAutoLoginForCurrentWifi(isManual: Boolean) {
+    private suspend fun triggerAutoLoginForCurrentWifi(isManual: Boolean, isKnownCaptive: Boolean = false) {
         // Enforce Wi-Fi only: Never run when on Mobile Data or when Wi-Fi is OFF
         if (!detector.isWifiConnected()) {
             return
@@ -317,13 +319,13 @@ class WifiMonitorService : Service() {
                 return
             }
 
-            // 1. Wait up to 2 seconds for DHCP IP & Gateway assignment from the Wi-Fi router
+            // 1. Fast DHCP IP & Gateway resolution (50ms intervals, max 3 tries = 150ms)
             var currentSsid = detector.getCurrentSsid()
             var gatewayIp = detector.getGatewayIpAddress()
             var retryCount = 0
-            while ((gatewayIp.isBlank() || gatewayIp == "0.0.0.0") && retryCount < 5) {
+            while ((gatewayIp.isBlank() || gatewayIp == "0.0.0.0") && retryCount < 3) {
                 if (!detector.isWifiConnected()) return
-                delay(300)
+                delay(50)
                 retryCount++
                 currentSsid = detector.getCurrentSsid()
                 gatewayIp = detector.getGatewayIpAddress()
@@ -345,26 +347,37 @@ class WifiMonitorService : Service() {
                 "Campus Wi-Fi"
             }
 
+            // 2. Normal Wi-Fi / Pre-flight check:
+            // If not flagged as captive and not manual, check network capabilities or run a fast probe
+            if (!isKnownCaptive && !isManual) {
+                val wifiNet = detector.getPrimaryWifiNetwork()
+                val caps = if (wifiNet != null) connectivityManager.getNetworkCapabilities(wifiNet) else null
+                val isAlreadyValidated = caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) == true &&
+                        caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_CAPTIVE_PORTAL) == false
+
+                if (isAlreadyValidated) {
+                    // Normal Wi-Fi network with no captive portal - STAY COMPLETELY SILENT
+                    LogRepository.info("Normal Wi-Fi", "'$activeNetworkName' is a standard online network. No captive login needed.")
+                    return
+                }
+
+                val preCheck = detector.probeConnectivity(settings.customProbeUrl, settings.bypassSslErrors)
+                if (preCheck.state == WifiState.CONNECTED_ONLINE && preCheck.httpCode == 204) {
+                    // Standard unblocked network / already authenticated - STAY COMPLETELY SILENT
+                    LogRepository.info("Normal Wi-Fi", "'$activeNetworkName' has direct internet access (HTTP 204). No captive login needed.")
+                    return
+                }
+            }
+
             if (currentSsid.isNotBlank()) {
                 LogRepository.info("Checking Profile", "Active SSID: '$currentSsid'. Gateway: '$gatewayIp'. Searching saved profiles...")
             } else {
                 LogRepository.info("Checking Gateway", "Searching profiles for '$activeNetworkName' (Gateway '$gatewayIp')...")
             }
 
-            // 2. Pre-flight Check: If already authenticated and internet is active, stop immediately!
-            if (!isManual) {
-                val preCheck = detector.probeConnectivity(settings.customProbeUrl, settings.bypassSslErrors)
-                if (preCheck.state == WifiState.CONNECTED_ONLINE && preCheck.httpCode == 204) {
-                    LogRepository.info("Already Authenticated", "Active Wi-Fi '$activeNetworkName' is already online & authenticated. Skipping auto-login.")
-                    updateNotification("Online: $activeNetworkName (Authenticated)")
-                    return
-                }
-            }
-
+            // If no profile configured for this captive network, stay silent (do not change notification)
             if (matchingProfiles.isEmpty()) {
                 LogRepository.info("No Profile", "No saved auto-login profile configured for '$activeNetworkName' yet.")
-                updateNotification("Connected to $activeNetworkName (No Profile)")
-                isLoggingIn.set(false)
                 return
             }
 
@@ -379,21 +392,22 @@ class WifiMonitorService : Service() {
                 if (result.isSuccess) {
                     profileRepository.updateProfileLoginStatus(profile.id, "SUCCESS")
 
-                    // Rapid 4-stage OS network revalidation to instantly dismiss "Sign in to Wi-Fi network"
+                    // Rapid non-blocking multi-pulse OS network revalidation to instantly dismiss "Sign in to Wi-Fi network"
                     triggerImmediateNetworkRevalidation()
 
                     val realName = detector.getCurrentSsid().ifBlank { activeNetworkName }
-                    val successMsg = "Online: $realName (${profile.username})"
-                    updateNotification(successMsg)
 
                     val shouldShowSuccessPopup = lastNotifiedSuccessNetwork != realName ||
-                            (System.currentTimeMillis() - lastNotifiedSuccessTime > 30 * 60 * 1000L)
+                            (System.currentTimeMillis() - lastNotifiedSuccessTime > 15 * 60 * 1000L)
 
                     if (settings.showNotifications && shouldShowSuccessPopup) {
                         lastNotifiedSuccessNetwork = realName
                         lastNotifiedSuccessTime = System.currentTimeMillis()
                         showSuccessNotification(realName, profile.username)
                     }
+
+                    // Return foreground notification to silent default
+                    updateNotification("Monitoring Wi-Fi networks in background...")
                     loginSuccess = true
                     break
                 } else {
@@ -406,7 +420,7 @@ class WifiMonitorService : Service() {
             }
 
             if (!loginSuccess) {
-                updateNotification("Login failed for $activeNetworkName")
+                updateNotification("Monitoring Wi-Fi networks in background...")
             }
 
         } catch (e: Exception) {
@@ -433,7 +447,7 @@ class WifiMonitorService : Service() {
                         val probe = detector.probeConnectivity(settings.customProbeUrl, settings.bypassSslErrors)
                         if (probe.state != WifiState.CONNECTED_ONLINE) {
                             LogRepository.warning("Keep-Alive Trigger", "Connection expired on $currentSsid. Re-authenticating...")
-                            triggerAutoLoginForCurrentWifi(isManual = false)
+                            triggerAutoLoginForCurrentWifi(isManual = false, isKnownCaptive = true)
                         } else {
                             LogRepository.info("Keep-Alive OK", "Connection active (Ping: ${probe.latencyMs}ms)")
                         }
@@ -445,14 +459,14 @@ class WifiMonitorService : Service() {
 
     private fun triggerImmediateNetworkRevalidation() {
         serviceScope.launch {
-            for (delayMs in listOf(0L, 150L, 400L, 800L, 1500L, 3000L)) {
-                if (delayMs > 0) delay(delayMs)
+            detector.forceDismissCaptivePortalNotification()
+            detector.blastSocket204Probes()
+
+            for (delayMs in listOf(40L, 100L, 200L, 400L, 800L, 1500L)) {
+                delay(delayMs)
                 try {
                     detector.forceDismissCaptivePortalNotification()
-                    val probe = detector.probeConnectivity()
-                    if (probe.state == WifiState.CONNECTED_ONLINE && probe.httpCode == 204) {
-                        detector.forceDismissCaptivePortalNotification()
-                    }
+                    detector.blastSocket204Probes()
                 } catch (e: Exception) {
                     // Ignore
                 }
