@@ -157,7 +157,7 @@ class WifiMonitorService : Service() {
                 CaptivePortalDetector.latestSsid = ""
                 lastNotifiedSuccessNetwork = null
                 LogRepository.info("Wi-Fi Lost", "Disconnected from Wi-Fi.")
-                dismissForegroundNotification()
+                updateNotification("Monitoring Wi-Fi networks in background...")
             }
         }
 
@@ -184,7 +184,7 @@ class WifiMonitorService : Service() {
 
                     override fun onLost(network: Network) {
                         CaptivePortalDetector.latestSsid = ""
-                        dismissForegroundNotification()
+                        updateNotification("Monitoring Wi-Fi networks in background...")
                     }
                 }
                 networkCallback = fallbackHandler
@@ -321,13 +321,13 @@ class WifiMonitorService : Service() {
                 return
             }
 
-            // 1. Fast DHCP IP & Gateway resolution (50ms intervals, max 3 tries = 150ms)
+            // 1. Fast DHCP IP & Gateway resolution (80ms intervals, up to 8 tries = 640ms, exits immediately when resolved)
             var currentSsid = detector.getCurrentSsid()
             var gatewayIp = detector.getGatewayIpAddress()
             var retryCount = 0
-            while ((gatewayIp.isBlank() || gatewayIp == "0.0.0.0") && retryCount < 3) {
+            while ((gatewayIp.isBlank() || gatewayIp == "0.0.0.0") && retryCount < 8) {
                 if (!detector.isWifiConnected()) return
-                delay(50)
+                delay(80)
                 retryCount++
                 currentSsid = detector.getCurrentSsid()
                 gatewayIp = detector.getGatewayIpAddress()
@@ -483,31 +483,6 @@ class WifiMonitorService : Service() {
         }
     }
 
-    private var fgDismissJob: Job? = null
-
-    private fun dismissForegroundNotification() {
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                stopForeground(STOP_FOREGROUND_REMOVE)
-            } else {
-                @Suppress("DEPRECATION")
-                stopForeground(true)
-            }
-            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            notificationManager.cancel(NOTIFICATION_ID)
-        } catch (e: Exception) {
-            // Ignore
-        }
-    }
-
-    private fun scheduleForegroundNotificationDismissal(delayMs: Long = 6000L) {
-        fgDismissJob?.cancel()
-        fgDismissJob = serviceScope.launch {
-            delay(delayMs)
-            dismissForegroundNotification()
-        }
-    }
-
     private fun startInForeground() {
         val notification = createNotification("Monitoring Wi-Fi networks in background...")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -515,14 +490,12 @@ class WifiMonitorService : Service() {
         } else {
             startForeground(NOTIFICATION_ID, notification)
         }
-        scheduleForegroundNotificationDismissal(6000L)
     }
 
     private fun updateNotification(content: String) {
         val notification = createNotification(content)
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         notificationManager.notify(NOTIFICATION_ID, notification)
-        scheduleForegroundNotificationDismissal(6000L)
     }
 
     private fun createNotification(contentText: String): Notification {

@@ -55,7 +55,7 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
-        <!-- Auto-Start on Device Boot Receiver -->
+        <!-- Auto-Start on Device Boot & Network State Receiver -->
         <receiver
             android:name=".service.BootReceiver"
             android:enabled="true"
@@ -64,6 +64,8 @@
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
                 <action android:name="android.net.wifi.STATE_CHANGE" />
+                <action android:name="android.net.wifi.WIFI_STATE_CHANGED" />
+                <action android:name="android.net.conn.CONNECTIVITY_CHANGE" />
             </intent-filter>
         </receiver>
 

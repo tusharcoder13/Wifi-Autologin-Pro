@@ -10,8 +10,10 @@ class BootReceiver : BroadcastReceiver() {
         val action = intent.action
         if (action == Intent.ACTION_BOOT_COMPLETED ||
             action == Intent.ACTION_MY_PACKAGE_REPLACED ||
-            action == "android.net.wifi.STATE_CHANGE") {
-            LogRepository.info("Boot/State Trigger", "Starting WiFi AutoLogin background monitor service...")
+            action == "android.net.wifi.STATE_CHANGE" ||
+            action == "android.net.wifi.WIFI_STATE_CHANGED" ||
+            action == "android.net.conn.CONNECTIVITY_CHANGE") {
+            LogRepository.info("Boot/State Trigger", "Network state change received ($action). Ensuring monitor service is active...")
             WifiMonitorService.start(context)
         }
     }
