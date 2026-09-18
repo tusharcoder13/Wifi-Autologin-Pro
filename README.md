@@ -2,6 +2,11 @@
 
 **WiFi AutoLogin Pro** is a modern Native Android application (built with **Kotlin** and **Jetpack Compose Material 3**) that automatically detects Wi-Fi captive portal login screens (college campus, hostel, hotel, office, and public hotspot networks) and automatically submits your saved Wi-Fi ID and Password in the background.
 
+[![Download APK](https://img.shields.io/badge/Download-Official%20APK-0D9488?style=for-the-badge&logo=android&logoColor=white)](https://tinyurl.com/WifiAutologin-Pro)
+[![GitHub stars](https://img.shields.io/github/stars/tusharcoder13/Wifi-Autologin-Pro?style=for-the-badge&color=teal)](https://github.com/tusharcoder13/Wifi-Autologin-Pro)
+
+📥 **Download Link**: [https://tinyurl.com/WifiAutologin-Pro](https://tinyurl.com/WifiAutologin-Pro)
+
 ---
 
 ## The Problem It Solves
