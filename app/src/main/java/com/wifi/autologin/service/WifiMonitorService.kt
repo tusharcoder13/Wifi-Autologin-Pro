@@ -46,8 +46,10 @@ class WifiMonitorService : Service() {
     companion object {
         const val CHANNEL_SILENT_DAEMON = "wifi_autologin_silent_daemon_v3"
         const val CHANNEL_ALERTS = "wifi_autologin_alerts_channel_v3"
+        const val CHANNEL_ERRORS = "wifi_autologin_errors_channel_v3"
         const val NOTIFICATION_ID = 1001
         const val SUCCESS_NOTIFICATION_ID = 1002
+        const val ERROR_NOTIFICATION_ID = 1003
         const val ACTION_MANUAL_LOGIN = "com.wifi.autologin.ACTION_MANUAL_LOGIN"
 
         fun start(context: Context) {
@@ -382,6 +384,8 @@ class WifiMonitorService : Service() {
             }
 
             var loginSuccess = false
+            var lastErrorMessage = ""
+
             for ((index, profile) in matchingProfiles.withIndex()) {
                 val accountLabel = if (profile.isPrimary) "Primary Account" else "Backup Account #${index + 1}"
                 LogRepository.info("Hands-Free Login", "Logging into $activeNetworkName with $accountLabel (${profile.username})...")
@@ -411,6 +415,7 @@ class WifiMonitorService : Service() {
                     loginSuccess = true
                     break
                 } else {
+                    lastErrorMessage = result.message
                     profileRepository.updateProfileLoginStatus(profile.id, "FAILED")
                     LogRepository.warning("Login Failed", "$accountLabel (${profile.username}) login failed (${result.message}).")
                     if (index < matchingProfiles.size - 1) {
@@ -421,6 +426,10 @@ class WifiMonitorService : Service() {
 
             if (!loginSuccess) {
                 updateNotification("Monitoring Wi-Fi networks in background...")
+                if (settings.showNotifications) {
+                    val displayError = if (lastErrorMessage.isNotBlank()) lastErrorMessage else "Authentication failed. Check your saved username/password."
+                    showErrorNotification(activeNetworkName, displayError)
+                }
             }
 
         } catch (e: Exception) {
@@ -514,26 +523,73 @@ class WifiMonitorService : Service() {
 
     private fun showSuccessNotification(ssid: String, username: String) {
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        // Clear any previous error notification upon success
+        try {
+            notificationManager.cancel(ERROR_NOTIFICATION_ID)
+        } catch (e: Exception) {
+            // Ignore
+        }
+
+        val openAppIntent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            this, 0, openAppIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
         val notification = NotificationCompat.Builder(this, CHANNEL_ALERTS)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle("Wi-Fi Auto-Login Successful")
-            .setContentText("Connected to $ssid ($username)")
+            .setContentText("Online: $ssid ($username)")
+            .setContentIntent(pendingIntent)
             .setAutoCancel(true)
             .setOnlyAlertOnce(true)
-            .setTimeoutAfter(5000) // Auto-dismisses after 5 seconds
+            .setTimeoutAfter(6000) // Auto-dismisses after 6 seconds
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .build()
         notificationManager.notify(SUCCESS_NOTIFICATION_ID, notification)
 
-        // Auto-dismiss after exactly 5 seconds
+        // Coroutine fallback to guarantee dismissal after 6 seconds
         serviceScope.launch {
-            delay(5000)
+            delay(6000)
             try {
                 notificationManager.cancel(SUCCESS_NOTIFICATION_ID)
             } catch (e: Exception) {
                 // Ignore
             }
         }
+    }
+
+    private fun showErrorNotification(ssid: String, errorMessage: String) {
+        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        try {
+            notificationManager.cancel(SUCCESS_NOTIFICATION_ID)
+        } catch (e: Exception) {
+            // Ignore
+        }
+
+        val openAppIntent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            this, 0, openAppIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val cleanError = if (errorMessage.isNotBlank()) errorMessage else "Authentication failed. Check your profile credentials."
+
+        val notification = NotificationCompat.Builder(this, CHANNEL_ERRORS)
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setContentTitle("⚠️ Wi-Fi Login Failed ($ssid)")
+            .setContentText(cleanError)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(cleanError))
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true) // User can dismiss or tap to open app
+            .setOngoing(false)   // Dismissible by user swipe
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .build()
+        notificationManager.notify(ERROR_NOTIFICATION_ID, notification)
     }
 
     private fun createNotificationChannel() {
@@ -554,16 +610,27 @@ class WifiMonitorService : Service() {
             }
             manager.createNotificationChannel(daemonChannel)
 
-            // 2. 5-Second Connection Alert Channel
+            // 2. 6-Second Temporary Connection Alert Channel (Auto-dismisses in 6s)
             val alertChannel = NotificationChannel(
                 CHANNEL_ALERTS,
                 "Wi-Fi Connection Alerts",
                 NotificationManager.IMPORTANCE_DEFAULT
             ).apply {
-                description = "Shows temporary 5-second notification when connected"
+                description = "Shows temporary 6-second notification when connected"
                 setShowBadge(false)
             }
             manager.createNotificationChannel(alertChannel)
+
+            // 3. Persistent Error Alerts Channel (Stays until user manually swipes away)
+            val errorChannel = NotificationChannel(
+                CHANNEL_ERRORS,
+                "Wi-Fi Login Errors & Alerts",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Shows critical login errors (wrong password, device limit) that stay until cleared"
+                setShowBadge(true)
+            }
+            manager.createNotificationChannel(errorChannel)
         }
     }
 
