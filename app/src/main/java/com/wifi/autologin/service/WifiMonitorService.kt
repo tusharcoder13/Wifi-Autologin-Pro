@@ -157,7 +157,7 @@ class WifiMonitorService : Service() {
                 CaptivePortalDetector.latestSsid = ""
                 lastNotifiedSuccessNetwork = null
                 LogRepository.info("Wi-Fi Lost", "Disconnected from Wi-Fi.")
-                updateNotification("Monitoring Wi-Fi networks in background...")
+                dismissForegroundNotification()
             }
         }
 
@@ -184,7 +184,7 @@ class WifiMonitorService : Service() {
 
                     override fun onLost(network: Network) {
                         CaptivePortalDetector.latestSsid = ""
-                        updateNotification("Monitoring Wi-Fi networks in background...")
+                        dismissForegroundNotification()
                     }
                 }
                 networkCallback = fallbackHandler
@@ -483,6 +483,31 @@ class WifiMonitorService : Service() {
         }
     }
 
+    private var fgDismissJob: Job? = null
+
+    private fun dismissForegroundNotification() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                stopForeground(STOP_FOREGROUND_REMOVE)
+            } else {
+                @Suppress("DEPRECATION")
+                stopForeground(true)
+            }
+            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            notificationManager.cancel(NOTIFICATION_ID)
+        } catch (e: Exception) {
+            // Ignore
+        }
+    }
+
+    private fun scheduleForegroundNotificationDismissal(delayMs: Long = 6000L) {
+        fgDismissJob?.cancel()
+        fgDismissJob = serviceScope.launch {
+            delay(delayMs)
+            dismissForegroundNotification()
+        }
+    }
+
     private fun startInForeground() {
         val notification = createNotification("Monitoring Wi-Fi networks in background...")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -490,12 +515,14 @@ class WifiMonitorService : Service() {
         } else {
             startForeground(NOTIFICATION_ID, notification)
         }
+        scheduleForegroundNotificationDismissal(6000L)
     }
 
     private fun updateNotification(content: String) {
         val notification = createNotification(content)
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         notificationManager.notify(NOTIFICATION_ID, notification)
+        scheduleForegroundNotificationDismissal(6000L)
     }
 
     private fun createNotification(contentText: String): Notification {
