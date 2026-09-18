@@ -1,10 +1,10 @@
-﻿===================================================================
+===================================================================
              📶 WiFi AutoLogin Pro - Official APK
    Instant, 100% Hands-Free Campus Wi-Fi Auto-Login
 ===================================================================
 
 👋 Welcome! 
-Tired of typing your roll number and password every time you connect to campus Wi-Fi? 
+Tired of typing your Wi-Fi ID and password every time you connect to campus Wi-Fi? 
 WiFi AutoLogin Pro automatically logs you in the moment you connect (<300ms) — without opening a browser or tapping any buttons!
 
 -------------------------------------------------------------------
@@ -41,7 +41,7 @@ STEP 2: Grant Permissions (First-time only)
 
 STEP 3: Add Your Profile
 • Go to the "Profiles" tab (or tap "+ Add Profile").
-• Enter your Campus Username (Roll No.) and Password.
+• Enter your Wi-Fi ID (Username) and Password.
 • Tap "Save Profile".
 
 STEP 4: You're All Set! 🚀

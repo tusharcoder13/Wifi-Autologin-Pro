@@ -8,7 +8,7 @@
 
 On Android devices, connecting to a captive portal Wi-Fi network triggers the system notification: *"Sign in to Wi-Fi network"*. 
 - Tapping that notification opens Android's restricted mini-browser (`CaptivePortalLoginActivity`), where Google Chrome autofill and password managers **do not work**.
-- Users are forced to manually type their roll number / username / password every time they reconnect or their session expires.
+- Users are forced to manually type their Wi-Fi ID / username / password every time they reconnect or their session expires.
 
 **WiFi AutoLogin Pro** runs as a lightweight Android background service, captures the captive portal page, auto-fills the credentials, and submits the login form in **less than 1 second** — eliminating the manual sign-in prompt entirely!
 
