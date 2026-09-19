@@ -235,7 +235,7 @@ fun FeedbackDialog(
                     OutlinedTextField(
                         value = name,
                         onValueChange = { name = it },
-                        label = { Text("Your Name (Optional)", fontSize = 12.sp) },
+                        label = { Text("Your Name", fontSize = 12.sp) },
                         placeholder = { Text("e.g. Rahul Sharma", fontSize = 12.sp, color = TextMutedDark) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
@@ -248,12 +248,12 @@ fun FeedbackDialog(
                         )
                     )
 
-                    // Contact / WhatsApp field
+                    // Contact Number field
                     OutlinedTextField(
                         value = contact,
                         onValueChange = { contact = it },
-                        label = { Text("WhatsApp / Contact / Room No (Optional)", fontSize = 12.sp) },
-                        placeholder = { Text("e.g. 9876543210 or Room 14", fontSize = 12.sp, color = TextMutedDark) },
+                        label = { Text("Contact Number", fontSize = 12.sp) },
+                        placeholder = { Text("e.g. 9876543210", fontSize = 12.sp, color = TextMutedDark) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(10.dp),
