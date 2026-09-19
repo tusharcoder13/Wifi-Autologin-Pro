@@ -14,8 +14,7 @@ import java.util.concurrent.TimeUnit
 object FeedbackManager {
 
     // Default Webhook endpoint for receiving student feedback into Google Sheets
-    // You can also paste your personal Google Apps Script Webhook URL here anytime
-    var webhookUrl: String = "https://script.google.com/macros/s/AKfycbz_feedback_placeholder/exec"
+    var webhookUrl: String = "https://script.google.com/macros/s/AKfycbyjuoMJSLuzNHl3Ac_lBBT3eovj7G-E-r-m9-Wk6XjUeoxrWKS4vAaIfrJgg-GbwDNx/exec"
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(5, TimeUnit.SECONDS)
