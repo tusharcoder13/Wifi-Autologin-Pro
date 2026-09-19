@@ -49,6 +49,9 @@ class MainActivity : ComponentActivity() {
                 val inspectorResult by viewModel.inspectorResult.collectAsState()
                 val isInspecting by viewModel.isInspecting.collectAsState()
                 val isLoggingIn by viewModel.isLoggingIn.collectAsState()
+                val updateInfo by viewModel.updateInfo.collectAsState()
+                val isCheckingUpdates by viewModel.isCheckingUpdates.collectAsState()
+                val updateCheckMessage by viewModel.updateCheckMessage.collectAsState()
 
                 Scaffold(
                     bottomBar = {
@@ -112,9 +115,21 @@ class MainActivity : ComponentActivity() {
 
                                 ScreenTab.SETTINGS -> SettingsScreen(
                                     settings = settings,
-                                    onUpdateSettings = { viewModel.updateSettings(it) }
+                                    onUpdateSettings = { viewModel.updateSettings(it) },
+                                    isCheckingUpdates = isCheckingUpdates,
+                                    updateCheckMessage = updateCheckMessage,
+                                    onCheckForUpdates = { viewModel.checkForUpdates(isManual = true) },
+                                    onClearUpdateMessage = { viewModel.clearUpdateMessage() }
                                 )
                             }
+                        }
+
+                        // In-App Update Dialog
+                        if (updateInfo != null) {
+                            com.wifi.autologin.ui.components.UpdateDialog(
+                                updateInfo = updateInfo!!,
+                                onDismiss = { viewModel.dismissUpdateDialog() }
+                            )
                         }
                     }
                 }

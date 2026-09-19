@@ -42,6 +42,7 @@ class WifiMonitorService : Service() {
     private var keepAliveJob: Job? = null
     private var lastNotifiedSuccessNetwork: String? = null
     private var lastNotifiedSuccessTime: Long = 0L
+    private var lastLimitReachedTimestamp: Long = 0L
 
     companion object {
         const val CHANNEL_SILENT_DAEMON = "wifi_autologin_silent_daemon_v3"
@@ -51,6 +52,8 @@ class WifiMonitorService : Service() {
         const val SUCCESS_NOTIFICATION_ID = 1002
         const val ERROR_NOTIFICATION_ID = 1003
         const val ACTION_MANUAL_LOGIN = "com.wifi.autologin.ACTION_MANUAL_LOGIN"
+        const val ACTION_FORCE_RELEASE_LOGIN = "com.wifi.autologin.ACTION_FORCE_RELEASE_LOGIN"
+        private const val LIMIT_REACHED_COOLDOWN_MS = 30_000L
 
         fun start(context: Context) {
             val intent = Intent(context, WifiMonitorService::class.java)
@@ -68,6 +71,21 @@ class WifiMonitorService : Service() {
         fun triggerLogin(context: Context) {
             val intent = Intent(context, WifiMonitorService::class.java).apply {
                 action = ACTION_MANUAL_LOGIN
+            }
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(intent)
+                } else {
+                    context.startService(intent)
+                }
+            } catch (e: Exception) {
+                // Ignore
+            }
+        }
+
+        fun triggerForceReleaseLogin(context: Context) {
+            val intent = Intent(context, WifiMonitorService::class.java).apply {
+                action = ACTION_FORCE_RELEASE_LOGIN
             }
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -109,6 +127,20 @@ class WifiMonitorService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val action = intent?.action
         serviceScope.launch {
+            if (action == ACTION_FORCE_RELEASE_LOGIN) {
+                val currentSsid = detector.getCurrentSsid()
+                val gatewayIp = detector.getGatewayIpAddress()
+                val primary = profileRepository.findProfileForNetwork(currentSsid, gatewayIp)
+                if (primary != null) {
+                    LogRepository.info("Force Kick", "Force releasing old session (mode 193) for ${primary.username}...")
+                    authEngine.forceReleaseSession(primary)
+                    delay(300)
+                    lastLimitReachedTimestamp = 0L
+                    triggerAutoLoginForCurrentWifi(isManual = true, isKnownCaptive = true)
+                }
+                return@launch
+            }
+
             val wifiNet = detector.getPrimaryWifiNetwork()
             if (wifiNet != null) {
                 bindNetworkAndTrigger(wifiNet, isCaptiveHint = (action == ACTION_MANUAL_LOGIN))
@@ -377,9 +409,15 @@ class WifiMonitorService : Service() {
                 LogRepository.info("Checking Gateway", "Searching profiles for '$activeNetworkName' (Gateway '$gatewayIp')...")
             }
 
-            // If no profile configured for this captive network, stay silent (do not change notification)
             if (matchingProfiles.isEmpty()) {
                 LogRepository.info("No Profile", "No saved auto-login profile configured for '$activeNetworkName' yet.")
+                return
+            }
+
+            // If account hit device limit recently, respect 30s cooldown so router session table clears
+            if (!isManual && (System.currentTimeMillis() - lastLimitReachedTimestamp < LIMIT_REACHED_COOLDOWN_MS)) {
+                val remainingSec = ((LIMIT_REACHED_COOLDOWN_MS - (System.currentTimeMillis() - lastLimitReachedTimestamp)) / 1000).coerceAtLeast(1)
+                LogRepository.info("Limit Cooldown", "Cooling down (${remainingSec}s remaining) after device limit reached on '$activeNetworkName' to prevent router lockout.")
                 return
             }
 
@@ -387,13 +425,14 @@ class WifiMonitorService : Service() {
             var lastErrorMessage = ""
 
             for ((index, profile) in matchingProfiles.withIndex()) {
-                val accountLabel = if (profile.isPrimary) "Primary Account" else "Backup Account #${index + 1}"
-                LogRepository.info("Hands-Free Login", "Logging into $activeNetworkName with $accountLabel (${profile.username})...")
+                val accountLabel = if (profile.isPrimary) "Primary Account" else "Backup Account #${index}"
+                LogRepository.info("Single-Shot Auth", "Targeted login for $activeNetworkName with $accountLabel (${profile.username})...")
                 updateNotification("Authenticating on $activeNetworkName...")
 
                 val result = authEngine.executeLogin(profile)
 
                 if (result.isSuccess) {
+                    lastLimitReachedTimestamp = 0L
                     profileRepository.updateProfileLoginStatus(profile.id, "SUCCESS")
 
                     // Rapid non-blocking multi-pulse OS network revalidation to instantly dismiss "Sign in to Wi-Fi network"
@@ -407,7 +446,8 @@ class WifiMonitorService : Service() {
                     if (settings.showNotifications && shouldShowSuccessPopup) {
                         lastNotifiedSuccessNetwork = realName
                         lastNotifiedSuccessTime = System.currentTimeMillis()
-                        showSuccessNotification(realName, profile.username)
+                        val successSubtitle = if (profile.isPrimary) profile.username else "${profile.username} (Backup Account)"
+                        showSuccessNotification(realName, successSubtitle)
                     }
 
                     // Return foreground notification to silent default
@@ -417,9 +457,19 @@ class WifiMonitorService : Service() {
                 } else {
                     lastErrorMessage = result.message
                     profileRepository.updateProfileLoginStatus(profile.id, "FAILED")
-                    LogRepository.warning("Login Failed", "$accountLabel (${profile.username}) login failed (${result.message}).")
+
+                    val isLimitError = result.message.contains("limit reached", ignoreCase = true) ||
+                            result.message.contains("maximum", ignoreCase = true)
+                    if (isLimitError) {
+                        lastLimitReachedTimestamp = System.currentTimeMillis()
+                    }
+
+                    LogRepository.warning("Login Failed", "$accountLabel (${profile.username}) rejected: ${result.message}")
+
                     if (index < matchingProfiles.size - 1) {
-                        LogRepository.info("Auto Failover", "Automatically switching to next backup account...")
+                        val nextProfile = matchingProfiles[index + 1]
+                        val nextLabel = if (nextProfile.isPrimary) "Primary" else "Backup Account #${index + 1}"
+                        LogRepository.info("Auto Failover", "Primary account unavailable. Instantly switching to $nextLabel (${nextProfile.username})...")
                     }
                 }
             }
@@ -578,8 +628,11 @@ class WifiMonitorService : Service() {
         )
 
         val cleanError = if (errorMessage.isNotBlank()) errorMessage else "Authentication failed. Check your profile credentials."
+        val isLimitError = errorMessage.contains("limit reached", ignoreCase = true) ||
+                errorMessage.contains("maximum", ignoreCase = true) ||
+                errorMessage.contains("another device", ignoreCase = true)
 
-        val notification = NotificationCompat.Builder(this, CHANNEL_ERRORS)
+        val notificationBuilder = NotificationCompat.Builder(this, CHANNEL_ERRORS)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle("⚠️ Wi-Fi Login Failed ($ssid)")
             .setContentText(cleanError)
@@ -588,8 +641,23 @@ class WifiMonitorService : Service() {
             .setAutoCancel(true) // User can dismiss or tap to open app
             .setOngoing(false)   // Dismissible by user swipe
             .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .build()
-        notificationManager.notify(ERROR_NOTIFICATION_ID, notification)
+
+        if (isLimitError) {
+            val kickIntent = Intent(this, WifiMonitorService::class.java).apply {
+                action = ACTION_FORCE_RELEASE_LOGIN
+            }
+            val kickPendingIntent = PendingIntent.getService(
+                this, 1, kickIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            notificationBuilder.addAction(
+                R.drawable.ic_wifi_tile,
+                "⚡ Release Old Session & Login",
+                kickPendingIntent
+            )
+        }
+
+        notificationManager.notify(ERROR_NOTIFICATION_ID, notificationBuilder.build())
     }
 
     private fun createNotificationChannel() {

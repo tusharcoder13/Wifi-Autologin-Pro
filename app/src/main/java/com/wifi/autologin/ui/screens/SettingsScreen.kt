@@ -28,7 +28,11 @@ import com.wifi.autologin.ui.theme.*
 @Composable
 fun SettingsScreen(
     settings: AppSettings,
-    onUpdateSettings: (AppSettings) -> Unit
+    onUpdateSettings: (AppSettings) -> Unit,
+    isCheckingUpdates: Boolean = false,
+    updateCheckMessage: String? = null,
+    onCheckForUpdates: () -> Unit = {},
+    onClearUpdateMessage: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val scrollState = rememberScrollState()
@@ -90,7 +94,7 @@ fun SettingsScreen(
 
                 SettingSwitchRow(
                     title = "Success Notifications",
-                    subtitle = "Show notification when login succeeds in background",
+                    subtitle = "Show temporary 6-second alert when login succeeds",
                     checked = settings.showNotifications,
                     onCheckedChange = { onUpdateSettings(settings.copy(showNotifications = it)) }
                 )
@@ -101,6 +105,34 @@ fun SettingsScreen(
                     checked = settings.bypassSslErrors,
                     onCheckedChange = { onUpdateSettings(settings.copy(bypassSslErrors = it)) }
                 )
+
+                HorizontalDivider(color = DarkSurfaceVariant.copy(alpha = 0.5f))
+
+                Button(
+                    onClick = {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            val intent = Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS).apply {
+                                putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                                putExtra(Settings.EXTRA_CHANNEL_ID, com.wifi.autologin.service.WifiMonitorService.CHANNEL_SILENT_DAEMON)
+                            }
+                            try {
+                                context.startActivity(intent)
+                            } catch (e: Exception) {
+                                val fallback = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                                    putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                                }
+                                context.startActivity(fallback)
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = DarkSurfaceVariant)
+                ) {
+                    Icon(imageVector = Icons.Default.NotificationsOff, contentDescription = null, tint = RedError, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("🚫 Hide 'Monitoring in background' Notification", color = TextPrimaryDark, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                }
             }
         }
 
@@ -256,6 +288,95 @@ fun SettingsScreen(
                     Icon(imageVector = Icons.Default.Password, contentDescription = null, tint = TealLight, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Enable Android Autofill Provider", color = TextPrimaryDark, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
+
+        // Section: Software Updates & Version Checker
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = DarkSurface)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "APP UPDATES",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TealLight
+                    )
+                    Surface(
+                        color = DarkSurfaceVariant,
+                        shape = RoundedCornerShape(6.dp)
+                    ) {
+                        Text(
+                            text = "Installed: v1.0.0",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TealLight,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+
+                Text(
+                    text = "WiFi AutoLogin Pro automatically checks for updates online. You can also manually check for the latest releases.",
+                    fontSize = 12.sp,
+                    color = TextSecondaryDark
+                )
+
+                if (updateCheckMessage != null) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp),
+                        color = DarkBackground
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "✅ $updateCheckMessage",
+                                fontSize = 11.sp,
+                                color = GreenSuccess,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            IconButton(onClick = onClearUpdateMessage, modifier = Modifier.size(16.dp)) {
+                                Icon(imageVector = Icons.Default.Close, contentDescription = null, tint = TextMutedDark)
+                            }
+                        }
+                    }
+                }
+
+                Button(
+                    onClick = onCheckForUpdates,
+                    enabled = !isCheckingUpdates,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(44.dp),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = DarkSurfaceVariant)
+                ) {
+                    if (isCheckingUpdates) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), color = TealLight, strokeWidth = 2.dp)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Checking for updates...", color = TextSecondaryDark, fontSize = 12.sp)
+                    } else {
+                        Icon(imageVector = Icons.Default.Refresh, contentDescription = null, tint = TealLight, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Check for Updates Now", color = TextPrimaryDark, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    }
                 }
             }
         }

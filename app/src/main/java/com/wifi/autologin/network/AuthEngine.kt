@@ -96,193 +96,65 @@ class AuthEngine(
     }
 
     /**
-     * Executes lightning-fast parallel login combining immediate subnet/gateway/campus endpoints
-     * with live dynamic wire discovery.
+     * Executes targeted single-shot login to the active gateway endpoint.
+     * Consumes ONLY 1 session slot on the router, preserving other devices (like Laptop).
      */
     suspend fun executeLogin(profile: WifiProfile): AuthResult = withContext(Dispatchers.IO) {
         val settings = appSettingsRepository.settings.value
-        LogRepository.info("Auth Started", "Logging in for '${profile.name}' (${profile.username})")
+        LogRepository.info("Auth Started", "Attempting login for '${profile.name}' (${profile.username})...")
 
         val client = getHttpClient(settings.bypassSslErrors)
         val gateway = detector.getGatewayIpAddress()
         val currentIp = detector.getCurrentIpAddress()
         val cleanProfile = profile
 
-        // 1. Build immediate target list
-        val dynamicTargets = mutableListOf<String>()
+        // 1. Determine primary targeted endpoint
+        val primaryTargetUrl = when {
+            cleanProfile.portalUrl.isNotBlank() && cleanProfile.portalUrl.startsWith("http") ->
+                cleanProfile.portalUrl
+            gateway.isNotBlank() && gateway != "0.0.0.0" && gateway != "127.0.0.1" ->
+                "http://$gateway:8090/httpclient.html"
+            currentIp.isNotBlank() && currentIp != "0.0.0.0" -> {
+                val parts = currentIp.split(".")
+                if (parts.size == 4) "http://${parts[0]}.${parts[1]}.${parts[2]}.1:8090/httpclient.html" else "http://172.24.16.1:8090/httpclient.html"
+            }
+            else -> "http://172.24.16.1:8090/httpclient.html"
+        }
 
-        fun addHostEndpoints(host: String) {
-            if (host.isBlank()) return
-            val cleanHost = host.removePrefix("http://").removePrefix("https://").split("/").firstOrNull() ?: host
-            val portHost = if (cleanHost.contains(":")) cleanHost else "$cleanHost:8090"
-            val rawHost = cleanHost.split(":").firstOrNull() ?: cleanHost
+        LogRepository.info("Target Endpoint", "Single-shot auth targeted to: $primaryTargetUrl")
 
-            dynamicTargets.add("http://$portHost/httpclient.html")
-            dynamicTargets.add("https://$portHost/httpclient.html")
-            dynamicTargets.add("http://$portHost/login.xml")
-            dynamicTargets.add("https://$portHost/login.xml")
-            dynamicTargets.add("http://$portHost/")
-            dynamicTargets.add("https://$portHost/")
-            if (rawHost != portHost) {
-                dynamicTargets.add("http://$rawHost/httpclient.html")
-                dynamicTargets.add("https://$rawHost/httpclient.html")
-                dynamicTargets.add("http://$rawHost/login.xml")
-                dynamicTargets.add("https://$rawHost/login.xml")
+        // 2. Perform Single-Shot POST
+        val primaryResult = postSingleAuth(client, primaryTargetUrl, cleanProfile)
+        if (primaryResult != null) {
+            if (primaryResult.isSuccess) {
+                detector.forceDismissCaptivePortalNotification()
+                detector.blastSocket204Probes()
+                LogRepository.success("Login Success", "Instant login verified on $primaryTargetUrl!")
+                return@withContext primaryResult
+            } else {
+                // Return explicit error (e.g. limit reached, wrong password) immediately for fast failover
+                return@withContext primaryResult
             }
         }
 
-        // Active DHCP gateway
-        if (gateway.isNotBlank() && gateway != "0.0.0.0" && gateway != "127.0.0.1") {
-            addHostEndpoints(gateway)
-        }
-
-        // Derived subnet gateway
-        if (currentIp.isNotBlank() && currentIp != "0.0.0.0") {
-            val parts = currentIp.split(".")
-            if (parts.size == 4) {
-                val derivedGateway = "${parts[0]}.${parts[1]}.${parts[2]}.1"
-                addHostEndpoints(derivedGateway)
-            }
-        }
-
-        // Campus server clusters
-        listOf("172.24.16.1", "172.24.64.1", "172.24.31.1", "172.24.17.1", "172.24.8.1", "172.24.1.1").forEach { gw ->
-            addHostEndpoints(gw)
-        }
-
-        // Profile custom portal URL
-        if (profile.portalUrl.isNotBlank() && profile.portalUrl.startsWith("http")) {
-            dynamicTargets.add(profile.portalUrl)
-            val clean = profile.portalUrl.split("?").firstOrNull() ?: profile.portalUrl
-            if (!clean.endsWith("/httpclient.html")) dynamicTargets.add(clean.trimEnd('/') + "/httpclient.html")
-            if (!clean.endsWith("/login.xml")) dynamicTargets.add(clean.trimEnd('/') + "/login.xml")
-        }
-
-        val distinctUrls = dynamicTargets.distinct()
-        LogRepository.info("Target Endpoints", "Dispatching instant parallel auth to ${distinctUrls.size} endpoints...")
-
-        // Function to perform single direct POST
-        suspend fun postToUrl(url: String): AuthResult? = withContext(Dispatchers.IO) {
-            try {
-                val formBody = FormBody.Builder()
-                    .add("mode", "191")
-                    .add("username", cleanProfile.username.trim())
-                    .add("password", cleanProfile.password.trim())
-                    .add("a", System.currentTimeMillis().toString())
-                    .add("producttype", "0")
-                    .add("saveinfo", "1")
-                    .add("popup", "0")
-                    .add("dst", "http://connectivitycheck.gstatic.com/generate_204")
-                    .build()
-
-                val req = Request.Builder()
-                    .url(url)
-                    .post(formBody)
-                    .header("User-Agent", "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36")
-                    .header("Referer", url)
-                    .header("Origin", url.split("/").take(3).joinToString("/"))
-                    .build()
-
-                val resp = client.newCall(req).execute()
-                val body = resp.body?.string() ?: ""
-                val snippet = if (body.length > 100) body.take(100).replace("\n", " ").trim() else body.trim()
-                LogRepository.info("Direct POST", "POST $url -> HTTP ${resp.code}: $snippet")
-
-                val messageMatch = Regex("<message>(?:<!\\[CDATA\\[)?(.*?)(?:\\]\\]>)?<\\/message>", RegexOption.IGNORE_CASE).find(body)
-                val messageVal = messageMatch?.groupValues?.get(1)?.trim() ?: ""
-
-                val isExplicitFailure = messageVal.contains("could not log you on", ignoreCase = true) ||
-                        messageVal.contains("incorrect", ignoreCase = true) ||
-                        messageVal.contains("limit reached", ignoreCase = true) ||
-                        messageVal.contains("exceeded", ignoreCase = true) ||
-                        messageVal.contains("failed", ignoreCase = true) ||
-                        messageVal.contains("denied", ignoreCase = true) ||
-                        messageVal.contains("another ip", ignoreCase = true) ||
-                        messageVal.contains("another device", ignoreCase = true) ||
-                        messageVal.contains("different ip", ignoreCase = true) ||
-                        messageVal.contains("maximum", ignoreCase = true)
-
-                val isExplicitSuccess = messageVal.contains("successfully", ignoreCase = true) ||
-                        messageVal.contains("already logged in", ignoreCase = true) ||
-                        messageVal.contains("success", ignoreCase = true) ||
-                        body.contains("<ack>ACK</ack>", ignoreCase = true) ||
-                        body.contains("successfully signed in", ignoreCase = true) ||
-                        body.contains("successfully logged in", ignoreCase = true) ||
-                        body.contains("status=1", ignoreCase = true) ||
-                        (body.contains("<status><![CDATA[LOGIN]]></status>", ignoreCase = true) && !isExplicitFailure) ||
-                        (body.contains("<status><![CDATA[LIVE]]></status>", ignoreCase = true) && !isExplicitFailure) ||
-                        (body.contains("<status><![CDATA[SUCCESS]]></status>", ignoreCase = true) && !isExplicitFailure)
-
-                if (isExplicitSuccess && !isExplicitFailure) {
-                    val msg = if (messageVal.isNotBlank()) messageVal else "Instant login verified!"
-                    AuthResult(isSuccess = true, httpCode = resp.code, message = msg, portalTargetUrl = url)
-                } else if (isExplicitFailure) {
-                    val formattedMsg = formatLoginErrorMessage(messageVal, cleanProfile.username)
-                    LogRepository.warning("Auth Response", formattedMsg)
-                    AuthResult(isSuccess = false, httpCode = resp.code, message = formattedMsg, portalTargetUrl = url)
-                } else {
-                    null
+        // 3. Fallback: If primary target gateway timed out/failed, try default campus cluster gateway once
+        val fallbackUrl = "http://172.24.16.1:8090/httpclient.html"
+        if (primaryTargetUrl != fallbackUrl) {
+            LogRepository.info("Fallback Gateway", "Retrying on campus cluster gateway: $fallbackUrl")
+            val fallbackResult = postSingleAuth(client, fallbackUrl, cleanProfile)
+            if (fallbackResult != null) {
+                if (fallbackResult.isSuccess) {
+                    detector.forceDismissCaptivePortalNotification()
+                    detector.blastSocket204Probes()
+                    LogRepository.success("Login Success", "Instant login verified on fallback gateway!")
                 }
-            } catch (e: Exception) {
-                null
+                return@withContext fallbackResult
             }
         }
 
-        // Fire all direct POSTs in parallel
-        val authDeferreds = distinctUrls.map { url ->
-            async(Dispatchers.IO) { postToUrl(url) }
-        }
-
-        // Also run dynamic wire probe in parallel
-        val probeDeferred = async(Dispatchers.IO) {
-            try {
-                val pResult = detector.probeConnectivity(settings.customProbeUrl, settings.bypassSslErrors)
-                val discovered = pResult.portalUrl.trim()
-                if (discovered.isNotBlank() && discovered.startsWith("http") && !distinctUrls.contains(discovered)) {
-                    LogRepository.info("Discovered Wire Target", "Found target from probe: $discovered")
-                    postToUrl(discovered)
-                } else {
-                    null
-                }
-            } catch (e: Exception) {
-                null
-            }
-        }
-
-        val allResults = (authDeferreds + probeDeferred).awaitAll().filterNotNull()
-
-        val successfulResult = allResults.firstOrNull { it.isSuccess }
-        if (successfulResult != null) {
-            detector.forceDismissCaptivePortalNotification()
-            detector.blastSocket204Probes()
-            LogRepository.success("Hands-Free Success", "Instant login verified on ${successfulResult.portalTargetUrl}!")
-            return@withContext successfulResult
-        }
-
-        val explicitFailure = allResults.firstOrNull { !it.isSuccess && it.message.isNotBlank() }
-        if (explicitFailure != null) {
-            return@withContext explicitFailure
-        }
-
-        // Fast probe check (100ms)
-        delay(100)
-        val probe = detector.probeConnectivity(settings.customProbeUrl, settings.bypassSslErrors)
-        if (probe.state == WifiState.CONNECTED_ONLINE && probe.httpCode == 204) {
-            detector.forceDismissCaptivePortalNotification()
-            detector.blastSocket204Probes()
-            LogRepository.success("Hands-Free Success", "Internet unblocked successfully!")
-            return@withContext AuthResult(isSuccess = true, httpCode = 204, message = "Internet verified online.")
-        }
-
-        // 4. SECONDARY PATH: Headless WebKit Browser Engine targeting discovered/default URL
-        val targetBrowserUrl = if (gateway.isNotBlank() && gateway != "0.0.0.0") {
-            "http://$gateway:8090/httpclient.html"
-        } else {
-            "http://172.24.16.1:8090/httpclient.html"
-        }
-
-        LogRepository.info("Auto-Engine", "Cascading to Headless WebKit Engine on '$targetBrowserUrl' for ${cleanProfile.username}...")
-        val webResult = WebViewLoginEngine.executeHeadlessLogin(context, cleanProfile, detector, targetBrowserUrl)
+        // 4. Secondary Fallback: Headless WebKit Browser Engine if raw HTTP endpoints were blocked
+        LogRepository.info("Auto-Engine", "Cascading to Headless WebKit Engine on '$primaryTargetUrl' for ${cleanProfile.username}...")
+        val webResult = WebViewLoginEngine.executeHeadlessLogin(context, cleanProfile, detector, primaryTargetUrl)
         if (webResult.isSuccess) {
             detector.forceDismissCaptivePortalNotification()
             detector.blastSocket204Probes()
@@ -291,9 +163,114 @@ class AuthEngine(
 
         AuthResult(
             isSuccess = false,
-            message = if (webResult.message.isNotBlank() && !webResult.message.contains("timed out", ignoreCase = true)) webResult.message else "Login Failed: Username / Password is wrong or server unreachable. Check profile (${cleanProfile.username}).",
-            portalTargetUrl = targetBrowserUrl
+            message = if (webResult.message.isNotBlank() && !webResult.message.contains("timed out", ignoreCase = true)) webResult.message else "Login Failed: Server unreachable or credentials rejected (${cleanProfile.username}).",
+            portalTargetUrl = primaryTargetUrl
         )
+    }
+
+    private suspend fun postSingleAuth(client: OkHttpClient, url: String, cleanProfile: WifiProfile): AuthResult? = withContext(Dispatchers.IO) {
+        try {
+            val formBody = FormBody.Builder()
+                .add("mode", "191")
+                .add("username", cleanProfile.username.trim())
+                .add("password", cleanProfile.password.trim())
+                .add("a", System.currentTimeMillis().toString())
+                .add("producttype", "0")
+                .add("saveinfo", "1")
+                .add("popup", "0")
+                .add("dst", "http://connectivitycheck.gstatic.com/generate_204")
+                .build()
+
+            val req = Request.Builder()
+                .url(url)
+                .post(formBody)
+                .header("User-Agent", "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36")
+                .header("Referer", url)
+                .header("Origin", url.split("/").take(3).joinToString("/"))
+                .build()
+
+            val resp = client.newCall(req).execute()
+            val body = resp.body?.string() ?: ""
+            val snippet = if (body.length > 100) body.take(100).replace("\n", " ").trim() else body.trim()
+            LogRepository.info("Direct POST", "POST $url -> HTTP ${resp.code}: $snippet")
+
+            val messageMatch = Regex("<message>(?:<!\\[CDATA\\[)?(.*?)(?:\\]\\]>)?<\\/message>", RegexOption.IGNORE_CASE).find(body)
+            val messageVal = messageMatch?.groupValues?.get(1)?.trim() ?: ""
+
+            val isExplicitFailure = messageVal.contains("could not log you on", ignoreCase = true) ||
+                    messageVal.contains("incorrect", ignoreCase = true) ||
+                    messageVal.contains("limit reached", ignoreCase = true) ||
+                    messageVal.contains("exceeded", ignoreCase = true) ||
+                    messageVal.contains("failed", ignoreCase = true) ||
+                    messageVal.contains("denied", ignoreCase = true) ||
+                    messageVal.contains("another ip", ignoreCase = true) ||
+                    messageVal.contains("another device", ignoreCase = true) ||
+                    messageVal.contains("different ip", ignoreCase = true) ||
+                    messageVal.contains("maximum", ignoreCase = true)
+
+            val isExplicitSuccess = messageVal.contains("successfully", ignoreCase = true) ||
+                    messageVal.contains("already logged in", ignoreCase = true) ||
+                    messageVal.contains("success", ignoreCase = true) ||
+                    body.contains("<ack>ACK</ack>", ignoreCase = true) ||
+                    body.contains("successfully signed in", ignoreCase = true) ||
+                    body.contains("successfully logged in", ignoreCase = true) ||
+                    body.contains("status=1", ignoreCase = true) ||
+                    (body.contains("<status><![CDATA[LOGIN]]></status>", ignoreCase = true) && !isExplicitFailure) ||
+                    (body.contains("<status><![CDATA[LIVE]]></status>", ignoreCase = true) && !isExplicitFailure) ||
+                    (body.contains("<status><![CDATA[SUCCESS]]></status>", ignoreCase = true) && !isExplicitFailure)
+
+            if (isExplicitSuccess && !isExplicitFailure) {
+                val msg = if (messageVal.isNotBlank()) messageVal else "Instant login verified!"
+                AuthResult(isSuccess = true, httpCode = resp.code, message = msg, portalTargetUrl = url)
+            } else if (isExplicitFailure) {
+                val formattedMsg = formatLoginErrorMessage(messageVal, cleanProfile.username)
+                LogRepository.warning("Auth Response", formattedMsg)
+                AuthResult(isSuccess = false, httpCode = resp.code, message = formattedMsg, portalTargetUrl = url)
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /**
+     * Sends Cyberoam/Sophos logout mode (193) to release ghost/stale sessions stuck on the router.
+     */
+    suspend fun forceReleaseSession(profile: WifiProfile): Boolean = withContext(Dispatchers.IO) {
+        val settings = appSettingsRepository.settings.value
+        val client = getHttpClient(settings.bypassSslErrors)
+        val gateway = detector.getGatewayIpAddress()
+
+        val targetUrl = when {
+            profile.portalUrl.isNotBlank() && profile.portalUrl.startsWith("http") -> profile.portalUrl
+            gateway.isNotBlank() && gateway != "0.0.0.0" -> "http://$gateway:8090/httpclient.html"
+            else -> "http://172.24.16.1:8090/httpclient.html"
+        }
+
+        try {
+            LogRepository.info("Session Release", "Sending session release (mode 193) for ${profile.username} to $targetUrl...")
+            val formBody = FormBody.Builder()
+                .add("mode", "193") // Cyberoam / Sophos logout mode
+                .add("username", profile.username.trim())
+                .add("password", profile.password.trim())
+                .add("a", System.currentTimeMillis().toString())
+                .add("producttype", "0")
+                .build()
+
+            val req = Request.Builder()
+                .url(targetUrl)
+                .post(formBody)
+                .build()
+
+            val resp = client.newCall(req).execute()
+            resp.close()
+            LogRepository.success("Session Released", "Session release request dispatched successfully.")
+            true
+        } catch (e: Exception) {
+            LogRepository.warning("Session Release", "Failed to dispatch session release: ${e.localizedMessage}")
+            false
+        }
     }
 
     private fun formatLoginErrorMessage(rawMessage: String, username: String): String {

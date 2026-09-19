@@ -1,0 +1,6 @@
+﻿{
+  "versionCode": 1,
+  "versionName": "1.0.0",
+  "releaseNotes": "• Single-shot targeted login (Laptop session protection)\n• Instant backup account auto-failover\n• 1-tap stale session kick (mode 193)\n• Hardware AES-256 KeyStore encryption\n• In-app automatic update notifications",
+  "downloadUrl": "https://tinyurl.com/WifiAutologin-Pro"
+}

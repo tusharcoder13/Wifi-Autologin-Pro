@@ -110,6 +110,44 @@ fun ProfilesScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     contentPadding = PaddingValues(bottom = 80.dp)
                 ) {
+                    if (sortedProfiles.size == 1) {
+                        item {
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.cardColors(containerColor = DarkSurfaceVariant.copy(alpha = 0.6f)),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, TealDark.copy(alpha = 0.4f))
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Lightbulb,
+                                        contentDescription = null,
+                                        tint = TealLight,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Column {
+                                        Text(
+                                            text = "💡 Auto-Failover Tip",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = TealLight
+                                        )
+                                        Text(
+                                            text = "Add a secondary or friend's Wi-Fi ID as a Backup Profile. If your primary account reaches its device limit, the app will seamlessly log in using your backup account!",
+                                            fontSize = 11.sp,
+                                            color = TextSecondaryDark,
+                                            lineHeight = 15.sp
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     items(
                         count = sortedProfiles.size,
                         key = { index -> "${sortedProfiles[index].id}_$index" }

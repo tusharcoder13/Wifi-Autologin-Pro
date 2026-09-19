@@ -2,6 +2,8 @@ package com.wifi.autologin.data.repository
 
 import android.content.Context
 import android.content.SharedPreferences
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.wifi.autologin.data.model.WifiProfile
@@ -11,14 +13,49 @@ import kotlinx.coroutines.flow.asStateFlow
 
 class ProfileRepository(context: Context) {
 
-    private val prefs: SharedPreferences = context.getSharedPreferences("wifi_profiles_store", Context.MODE_PRIVATE)
+    private val prefs: SharedPreferences = createEncryptedPreferences(context)
     private val gson = Gson()
 
     private val _profiles = MutableStateFlow<List<WifiProfile>>(emptyList())
     val profiles: StateFlow<List<WifiProfile>> = _profiles.asStateFlow()
 
     init {
+        migrateLegacyPreferences(context)
         loadProfiles()
+    }
+
+    private fun createEncryptedPreferences(context: Context): SharedPreferences {
+        return try {
+            val masterKey = MasterKey.Builder(context)
+                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                .build()
+
+            EncryptedSharedPreferences.create(
+                context,
+                SECURE_PREFS_NAME,
+                masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            )
+        } catch (e: Exception) {
+            // Fallback for custom ROMs or test environments where Android KeyStore might fail
+            context.getSharedPreferences(LEGACY_PREFS_NAME, Context.MODE_PRIVATE)
+        }
+    }
+
+    private fun migrateLegacyPreferences(context: Context) {
+        try {
+            val legacyPrefs = context.getSharedPreferences(LEGACY_PREFS_NAME, Context.MODE_PRIVATE)
+            if (legacyPrefs.contains(KEY_PROFILES)) {
+                val legacyJson = legacyPrefs.getString(KEY_PROFILES, null)
+                if (!legacyJson.isNullOrBlank() && !prefs.contains(KEY_PROFILES)) {
+                    prefs.edit().putString(KEY_PROFILES, legacyJson).apply()
+                }
+                legacyPrefs.edit().clear().apply()
+            }
+        } catch (e: Exception) {
+            // Safe fallback
+        }
     }
 
     private fun loadProfiles() {
@@ -153,6 +190,8 @@ class ProfileRepository(context: Context) {
     }
 
     companion object {
+        private const val SECURE_PREFS_NAME = "secure_wifi_profiles_store"
+        private const val LEGACY_PREFS_NAME = "wifi_profiles_store"
         private const val KEY_PROFILES = "saved_wifi_profiles"
     }
 }

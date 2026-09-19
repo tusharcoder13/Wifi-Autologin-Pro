@@ -51,9 +51,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _isLoggingIn = MutableStateFlow(false)
     val isLoggingIn: StateFlow<Boolean> = _isLoggingIn.asStateFlow()
 
+    private val _updateInfo = MutableStateFlow<com.wifi.autologin.data.model.UpdateInfo?>(null)
+    val updateInfo: StateFlow<com.wifi.autologin.data.model.UpdateInfo?> = _updateInfo.asStateFlow()
+
+    private val _isCheckingUpdates = MutableStateFlow(false)
+    val isCheckingUpdates: StateFlow<Boolean> = _isCheckingUpdates.asStateFlow()
+
+    private val _updateCheckMessage = MutableStateFlow<String?>(null)
+    val updateCheckMessage: StateFlow<String?> = _updateCheckMessage.asStateFlow()
+
     init {
         refreshConnectionStatus()
         startLiveNetworkObserver()
+        checkForUpdates(isManual = false)
     }
 
     private fun startLiveNetworkObserver() {
@@ -279,5 +289,43 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             settingsRepo.updateSettings(newSettings)
             refreshConnectionStatus()
         }
+    }
+
+    fun checkForUpdates(isManual: Boolean = false) {
+        viewModelScope.launch(Dispatchers.IO) {
+            _isCheckingUpdates.value = true
+            _updateCheckMessage.value = null
+
+            val app = getApplication<Application>()
+            val pInfo = try {
+                app.packageManager.getPackageInfo(app.packageName, 0)
+            } catch (e: Exception) {
+                null
+            }
+
+            val currentCode = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                pInfo?.longVersionCode?.toInt() ?: 1
+            } else {
+                @Suppress("DEPRECATION")
+                pInfo?.versionCode ?: 1
+            }
+
+            val update = com.wifi.autologin.network.UpdateManager.fetchLatestUpdate(currentCode)
+            if (update != null) {
+                _updateInfo.value = update
+            } else if (isManual) {
+                _updateCheckMessage.value = "You are using the latest version (${pInfo?.versionName ?: "1.0.0"})"
+            }
+
+            _isCheckingUpdates.value = false
+        }
+    }
+
+    fun dismissUpdateDialog() {
+        _updateInfo.value = null
+    }
+
+    fun clearUpdateMessage() {
+        _updateCheckMessage.value = null
     }
 }
