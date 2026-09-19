@@ -32,7 +32,8 @@ fun SettingsScreen(
     isCheckingUpdates: Boolean = false,
     updateCheckMessage: String? = null,
     onCheckForUpdates: () -> Unit = {},
-    onClearUpdateMessage: () -> Unit = {}
+    onClearUpdateMessage: () -> Unit = {},
+    onOpenFeedback: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val scrollState = rememberScrollState()
@@ -377,6 +378,85 @@ fun SettingsScreen(
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("Check for Updates Now", color = TextPrimaryDark, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                     }
+                }
+            }
+        }
+
+        // Section: Share Feedback & Suggestions
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = DarkSurface)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Favorite,
+                            contentDescription = null,
+                            tint = Color(0xFFFF6B6B),
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Text(
+                            text = "USER FEEDBACK & REACTION",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TealLight
+                        )
+                    }
+                    Surface(
+                        color = TealDark.copy(alpha = 0.5f),
+                        shape = RoundedCornerShape(6.dp)
+                    ) {
+                        Text(
+                            text = "Direct to Dev",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TealLight,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+
+                Text(
+                    text = "Help make WiFi AutoLogin Pro better! Rate your experience, report an issue, or drop a quick suggestion.",
+                    fontSize = 12.sp,
+                    color = TextSecondaryDark
+                )
+
+                Button(
+                    onClick = onOpenFeedback,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(44.dp),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = TealPrimary)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Star,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(17.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        "Share Feedback & Reaction",
+                        color = Color.White,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
         }

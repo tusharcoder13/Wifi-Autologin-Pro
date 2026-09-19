@@ -328,4 +328,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun clearUpdateMessage() {
         _updateCheckMessage.value = null
     }
+
+    fun submitFeedback(payload: com.wifi.autologin.data.model.FeedbackPayload) {
+        viewModelScope.launch(Dispatchers.IO) {
+            com.wifi.autologin.network.FeedbackManager.submitFeedback(payload)
+        }
+    }
 }

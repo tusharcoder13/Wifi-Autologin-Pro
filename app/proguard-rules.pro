@@ -10,6 +10,7 @@
 -keep class com.wifi.autologin.network.AuthResult { *; }
 -keep class com.wifi.autologin.network.ProbeResult { *; }
 -keep class com.wifi.autologin.network.UpdateManager { *; }
+-keep class com.wifi.autologin.network.FeedbackManager { *; }
 
 # Jsoup HTML parser
 -keep class org.jsoup.** { *; }

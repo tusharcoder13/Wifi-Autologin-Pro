@@ -41,6 +41,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             WiFiAutoLoginProTheme {
                 var currentTab by remember { mutableStateOf(ScreenTab.DASHBOARD) }
+                var showFeedbackDialog by remember { mutableStateOf(false) }
 
                 val connectionStatus by viewModel.connectionStatus.collectAsState()
                 val profiles by viewModel.profiles.collectAsState()
@@ -119,7 +120,8 @@ class MainActivity : ComponentActivity() {
                                     isCheckingUpdates = isCheckingUpdates,
                                     updateCheckMessage = updateCheckMessage,
                                     onCheckForUpdates = { viewModel.checkForUpdates(isManual = true) },
-                                    onClearUpdateMessage = { viewModel.clearUpdateMessage() }
+                                    onClearUpdateMessage = { viewModel.clearUpdateMessage() },
+                                    onOpenFeedback = { showFeedbackDialog = true }
                                 )
                             }
                         }
@@ -129,6 +131,17 @@ class MainActivity : ComponentActivity() {
                             com.wifi.autologin.ui.components.UpdateDialog(
                                 updateInfo = updateInfo!!,
                                 onDismiss = { viewModel.dismissUpdateDialog() }
+                            )
+                        }
+
+                        // In-App Feedback Dialog
+                        if (showFeedbackDialog) {
+                            com.wifi.autologin.ui.components.FeedbackDialog(
+                                currentSsid = connectionStatus.ssid,
+                                onDismiss = { showFeedbackDialog = false },
+                                onSubmit = { payload ->
+                                    viewModel.submitFeedback(payload)
+                                }
                             )
                         }
                     }
