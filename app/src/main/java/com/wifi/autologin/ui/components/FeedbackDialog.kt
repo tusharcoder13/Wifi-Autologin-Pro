@@ -10,6 +10,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -19,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -248,17 +250,27 @@ fun FeedbackDialog(
                     )
 
                     // Contact Number field
+                    val isContactInvalid = contact.isNotEmpty() && contact.length < 10
                     OutlinedTextField(
                         value = contact,
-                        onValueChange = { contact = it },
+                        onValueChange = { input ->
+                            // Only digits allowed, maximum 10 digits
+                            contact = input.filter { it.isDigit() }.take(10)
+                        },
                         label = { Text("Contact Number", fontSize = 12.sp) },
                         placeholder = { Text("e.g. 9876543210", fontSize = 12.sp, color = TextMutedDark) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
+                        isError = isContactInvalid,
+                        supportingText = if (isContactInvalid) {
+                            { Text("Must be a 10-digit number (${contact.length}/10)", color = Color(0xFFFF6B6B), fontSize = 11.sp) }
+                        } else null,
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(10.dp),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = TealPrimary,
                             unfocusedBorderColor = DarkSurfaceVariant,
+                            errorBorderColor = Color(0xFFFF6B6B),
                             focusedTextColor = TextPrimaryDark,
                             unfocusedTextColor = TextPrimaryDark
                         )
@@ -311,9 +323,13 @@ fun FeedbackDialog(
                                 onSubmit(payload)
                                 isSubmitted = true
                             },
+                            enabled = !isContactInvalid,
                             modifier = Modifier.weight(1.3f),
                             shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = TealPrimary)
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = TealPrimary,
+                                disabledContainerColor = DarkSurfaceVariant
+                            )
                         ) {
                             Icon(imageVector = Icons.Default.Send, contentDescription = null, modifier = Modifier.size(15.dp))
                             Spacer(modifier = Modifier.width(6.dp))
