@@ -27,7 +27,6 @@ import com.wifi.autologin.ui.theme.*
 
 @Composable
 fun FeedbackDialog(
-    currentSsid: String,
     onDismiss: () -> Unit,
     onSubmit: (FeedbackPayload) -> Unit
 ) {
@@ -307,8 +306,7 @@ fun FeedbackDialog(
                                     message = message.trim(),
                                     deviceModel = "${Build.MANUFACTURER} ${Build.MODEL}",
                                     androidVersion = "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})",
-                                    appVersion = "1.0.0",
-                                    ssid = currentSsid
+                                    appVersion = "1.0.0"
                                 )
                                 onSubmit(payload)
                                 isSubmitted = true

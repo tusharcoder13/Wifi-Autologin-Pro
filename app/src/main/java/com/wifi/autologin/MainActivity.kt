@@ -137,7 +137,6 @@ class MainActivity : ComponentActivity() {
                         // In-App Feedback Dialog
                         if (showFeedbackDialog) {
                             com.wifi.autologin.ui.components.FeedbackDialog(
-                                currentSsid = connectionStatus.ssid,
                                 onDismiss = { showFeedbackDialog = false },
                                 onSubmit = { payload ->
                                     viewModel.submitFeedback(payload)
