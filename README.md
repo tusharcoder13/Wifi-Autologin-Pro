@@ -155,5 +155,5 @@ The optimized release APK will be generated at `app/build/outputs/apk/release/ap
 
 ## 📄 License & Attribution
 
-- **Developer**: Tushar Sahu ([LinkedIn](https://www.linkedin.com/in/tusharsahu13))
+- **Developer**: Tushar Sahu (<a href="https://www.linkedin.com/in/tusharsahu13" target="_blank" rel="noopener noreferrer">LinkedIn ↗</a>)
 - **License**: Open Source for Educational & Personal Use.
