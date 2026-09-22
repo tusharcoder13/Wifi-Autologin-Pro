@@ -70,13 +70,14 @@ fun DashboardScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Row(
+                modifier = Modifier.weight(1f, fill = false),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Box(
                     modifier = Modifier
-                        .size(42.dp)
-                        .clip(RoundedCornerShape(12.dp))
+                        .size(38.dp)
+                        .clip(RoundedCornerShape(10.dp))
                         .background(TealDark),
                     contentAlignment = Alignment.Center
                 ) {
@@ -84,77 +85,80 @@ fun DashboardScreen(
                         imageVector = Icons.Default.Wifi,
                         contentDescription = null,
                         tint = TealLight,
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(20.dp)
                     )
                 }
                 Column {
                     Text(
                         text = "WiFi AutoLogin Pro",
-                        fontSize = 18.sp,
+                        fontSize = 17.sp,
                         fontWeight = FontWeight.Bold,
                         color = TextPrimaryDark,
                         maxLines = 1
                     )
                     Text(
                         text = "Captive Portal Bypass Daemon",
-                        fontSize = 12.sp,
+                        fontSize = 11.sp,
                         color = TextSecondaryDark,
                         maxLines = 1
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(6.dp))
 
             Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // In-App Feedback Button
-                IconButton(
-                    onClick = onFeedbackClick,
+                Box(
                     modifier = Modifier
-                        .size(38.dp)
+                        .size(34.dp)
                         .clip(CircleShape)
                         .background(DarkSurfaceVariant)
+                        .clickable(onClick = onFeedbackClick),
+                    contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Default.Favorite,
                         contentDescription = "Share Feedback",
                         tint = Color(0xFFFF6B6B),
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(16.dp)
                     )
                 }
 
                 // Help Guide Button
-                IconButton(
-                    onClick = { showGuideDialog = true },
+                Box(
                     modifier = Modifier
-                        .size(38.dp)
+                        .size(34.dp)
                         .clip(CircleShape)
                         .background(DarkSurfaceVariant)
+                        .clickable { showGuideDialog = true },
+                    contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Default.HelpOutline,
                         contentDescription = "How It Works",
                         tint = TealLight,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(16.dp)
                     )
                 }
 
                 // Refresh Status Button
-                IconButton(
-                    onClick = onRefreshClick,
+                Box(
                     modifier = Modifier
-                        .size(38.dp)
+                        .size(34.dp)
                         .clip(CircleShape)
                         .background(DarkSurfaceVariant)
+                        .clickable(onClick = onRefreshClick),
+                    contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Default.Refresh,
                         contentDescription = "Refresh Status",
                         tint = TealLight,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(16.dp)
                     )
                 }
             }
