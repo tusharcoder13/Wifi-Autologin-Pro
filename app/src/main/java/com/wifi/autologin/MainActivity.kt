@@ -86,7 +86,8 @@ class MainActivity : ComponentActivity() {
                                     onNavigateToLogs = { currentTab = ScreenTab.LOGS },
                                     onNavigateToProfiles = { currentTab = ScreenTab.PROFILES },
                                     onNavigateToSettings = { currentTab = ScreenTab.SETTINGS },
-                                    onSwitchProfile = { profileId -> viewModel.setPrimaryProfile(profileId) }
+                                    onSwitchProfile = { profileId -> viewModel.setPrimaryProfile(profileId) },
+                                    onFeedbackClick = { showFeedbackDialog = true }
                                 )
 
                                 ScreenTab.PROFILES -> ProfilesScreen(

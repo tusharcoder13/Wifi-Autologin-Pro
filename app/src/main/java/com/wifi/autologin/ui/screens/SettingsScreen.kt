@@ -320,8 +320,15 @@ fun SettingsScreen(
                         color = DarkSurfaceVariant,
                         shape = RoundedCornerShape(6.dp)
                     ) {
+                        val appVersion = remember {
+                            try {
+                                context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "2.0.0"
+                            } catch (e: Exception) {
+                                "2.0.0"
+                            }
+                        }
                         Text(
-                            text = "Installed: v1.0.0",
+                            text = "Installed: v$appVersion",
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             color = TealLight,
@@ -538,7 +545,14 @@ fun SettingsScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Text("WiFi AutoLogin Pro v1.0.0", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextMutedDark)
+            val appVersion = remember {
+                try {
+                    context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "2.0.0"
+                } catch (e: Exception) {
+                    "2.0.0"
+                }
+            }
+            Text("WiFi AutoLogin Pro v$appVersion", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextMutedDark)
             Text("Built for Campus, Hostel, Hotel & Office Captive Portals", fontSize = 11.sp, color = TextMutedDark)
 
             Spacer(modifier = Modifier.height(4.dp))

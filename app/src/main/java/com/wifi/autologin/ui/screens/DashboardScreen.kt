@@ -40,7 +40,8 @@ fun DashboardScreen(
     onNavigateToLogs: () -> Unit,
     onNavigateToProfiles: () -> Unit,
     onNavigateToSettings: () -> Unit = {},
-    onSwitchProfile: (String) -> Unit = {}
+    onSwitchProfile: (String) -> Unit = {},
+    onFeedbackClick: () -> Unit = {}
 ) {
     val scrollState = rememberScrollState()
     var showGuideDialog by remember { mutableStateOf(false) }
@@ -62,28 +63,27 @@ fun DashboardScreen(
     ) {
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Top App Header
+        // App Header
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Row(
-                modifier = Modifier.weight(1f, fill = false),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Box(
                     modifier = Modifier
                         .size(42.dp)
-                        .clip(CircleShape)
-                        .background(TealPrimary),
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(TealDark),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = Icons.Default.WifiTethering,
+                        imageVector = Icons.Default.Wifi,
                         contentDescription = null,
-                        tint = Color.White,
+                        tint = TealLight,
                         modifier = Modifier.size(24.dp)
                     )
                 }
@@ -104,12 +104,29 @@ fun DashboardScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(8.dp))
 
             Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                // In-App Feedback Button
+                IconButton(
+                    onClick = onFeedbackClick,
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .background(DarkSurfaceVariant)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Favorite,
+                        contentDescription = "Share Feedback",
+                        tint = Color(0xFFFF6B6B),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                // Help Guide Button
                 IconButton(
                     onClick = { showGuideDialog = true },
                     modifier = Modifier
@@ -125,6 +142,7 @@ fun DashboardScreen(
                     )
                 }
 
+                // Refresh Status Button
                 IconButton(
                     onClick = onRefreshClick,
                     modifier = Modifier

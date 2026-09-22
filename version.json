@@ -1,6 +1,6 @@
-﻿{
-  "versionCode": 1,
-  "versionName": "1.0.0",
-  "releaseNotes": "• Single-shot targeted login (Laptop session protection)\n• Instant backup account auto-failover\n• 1-tap stale session kick (mode 193)\n• Hardware AES-256 KeyStore encryption\n• In-app automatic update notifications",
+{
+  "versionCode": 2,
+  "versionName": "2.0.0",
+  "releaseNotes": "• Full Vivo / Funtouch OS compatibility & auto-recovery\n• Universal Wi-Fi auto-login (works even with Location/GPS off)\n• Dual-Layer Resilient Profile Storage (zero credential loss)\n• Added 1-tap Feedback & Reaction button on Home screen\n• Enhanced 10-digit number validation for direct support",
   "downloadUrl": "https://tinyurl.com/WifiAutologin-Pro"
 }
