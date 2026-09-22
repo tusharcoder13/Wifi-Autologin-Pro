@@ -12,9 +12,8 @@ WiFi AutoLogin Pro automatically logs you in the moment you connect (<300ms) —
 -------------------------------------------------------------------
 Many people worry when downloading an APK directly. Here is why you can trust it:
 
-✅ 100% Open-Source: 
-   The complete code is public and open for anyone to inspect on GitHub:
-   👉 https://github.com/tusharcoder13/Wifi-Autologin-Pro
+✅ 100% Secure & On-Device: 
+   Your credentials never leave your device. All sensitive information is encrypted directly on-device using Android's hardware-backed KeyStore (AES-256-GCM).
 
 ✅ 100% Private: 
    Your username and password stay only on your phone. Nothing is uploaded or shared online.
@@ -56,6 +55,5 @@ Hit your device limit? You can add backup accounts (e.g. roommate's login). If y
 -------------------------------------------------------------------
 👨‍💻 Developer & Project Details:
 Developed with ❤️ for students & staff by Tushar Sahu.
-• GitHub: https://github.com/tusharcoder13/Wifi-Autologin-Pro
 • LinkedIn: https://www.linkedin.com/in/tusharsahu13
 ===================================================================
