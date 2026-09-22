@@ -309,7 +309,7 @@ fun DashboardScreen(
                             )
                         }
                     }
-                } else if (status.state != WifiState.DISCONNECTED && status.ssid.isNotBlank() && status.ssid != "Wi-Fi Disconnected") {
+                } else if (status.state != WifiState.DISCONNECTED && status.ssid != "Wi-Fi Disconnected") {
                     Surface(
                         color = AmberWarning.copy(alpha = 0.15f),
                         shape = RoundedCornerShape(10.dp),
@@ -321,6 +321,7 @@ fun DashboardScreen(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Row(
+                                modifier = Modifier.weight(1f),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
@@ -331,13 +332,17 @@ fun DashboardScreen(
                                     modifier = Modifier.size(18.dp)
                                 )
                                 Text(
-                                    text = "No profile for '${status.ssid}'",
+                                    text = if (status.ssid.isNotBlank() && status.ssid != "<unknown ssid>" && status.ssid != "Campus Wi-Fi") {
+                                        "No profile for '${status.ssid}'"
+                                    } else {
+                                        "No Wi-Fi profile created yet"
+                                    },
                                     fontSize = 12.sp,
                                     color = AmberWarning
                                 )
                             }
                             TextButton(onClick = onNavigateToProfiles) {
-                                Text("Add Now", color = TealLight, fontSize = 12.sp)
+                                Text("Add Profile", color = TealLight, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                             }
                         }
                     }

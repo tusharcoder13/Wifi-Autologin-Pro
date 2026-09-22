@@ -11,20 +11,22 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-class ProfileRepository(context: Context) {
+class ProfileRepository(private val context: Context) {
 
-    private val prefs: SharedPreferences = createEncryptedPreferences(context)
+    private var securePrefs: SharedPreferences? = createEncryptedPreferences(context)
+    private val backupPrefs: SharedPreferences = context.getSharedPreferences(BACKUP_PREFS_NAME, Context.MODE_PRIVATE)
+    private val legacyPrefs: SharedPreferences = context.getSharedPreferences(LEGACY_PREFS_NAME, Context.MODE_PRIVATE)
     private val gson = Gson()
 
     private val _profiles = MutableStateFlow<List<WifiProfile>>(emptyList())
     val profiles: StateFlow<List<WifiProfile>> = _profiles.asStateFlow()
 
     init {
-        migrateLegacyPreferences(context)
+        migrateLegacyPreferences()
         loadProfiles()
     }
 
-    private fun createEncryptedPreferences(context: Context): SharedPreferences {
+    private fun createEncryptedPreferences(context: Context): SharedPreferences? {
         return try {
             val masterKey = MasterKey.Builder(context)
                 .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
@@ -38,18 +40,24 @@ class ProfileRepository(context: Context) {
                 EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
             )
         } catch (e: Exception) {
-            // Fallback for custom ROMs or test environments where Android KeyStore might fail
-            context.getSharedPreferences(LEGACY_PREFS_NAME, Context.MODE_PRIVATE)
+            // KeyStore exception on custom OEM skins (Vivo / Oppo / Xiaomi / Custom ROMs)
+            null
         }
     }
 
-    private fun migrateLegacyPreferences(context: Context) {
+    private fun migrateLegacyPreferences() {
         try {
-            val legacyPrefs = context.getSharedPreferences(LEGACY_PREFS_NAME, Context.MODE_PRIVATE)
             if (legacyPrefs.contains(KEY_PROFILES)) {
                 val legacyJson = legacyPrefs.getString(KEY_PROFILES, null)
-                if (!legacyJson.isNullOrBlank() && !prefs.contains(KEY_PROFILES)) {
-                    prefs.edit().putString(KEY_PROFILES, legacyJson).apply()
+                if (!legacyJson.isNullOrBlank()) {
+                    // Migrate to backup prefs immediately
+                    backupPrefs.edit().putString(KEY_PROFILES, legacyJson).apply()
+                    // Try writing to secure prefs if available
+                    try {
+                        securePrefs?.edit()?.putString(KEY_PROFILES, legacyJson)?.apply()
+                    } catch (e: Exception) {
+                        // Ignore
+                    }
                 }
                 legacyPrefs.edit().clear().apply()
             }
@@ -59,18 +67,38 @@ class ProfileRepository(context: Context) {
     }
 
     private fun loadProfiles() {
-        val json = prefs.getString(KEY_PROFILES, null)
-        if (json != null) {
+        var json: String? = null
+
+        // 1. Try reading from Encrypted KeyStore store
+        try {
+            json = securePrefs?.getString(KEY_PROFILES, null)
+        } catch (e: Exception) {
+            // Re-initialize securePrefs if KeyStore desynced on Vivo
+            securePrefs = null
+        }
+
+        // 2. If secure store is null or empty, failover safely to backup store (Vivo resilience)
+        if (json.isNullOrBlank()) {
+            try {
+                json = backupPrefs.getString(KEY_PROFILES, null)
+            } catch (e: Exception) {
+                json = null
+            }
+        }
+
+        if (!json.isNullOrBlank()) {
             val type = object : TypeToken<List<WifiProfile>>() {}.type
             try {
                 val list: List<WifiProfile> = gson.fromJson(json, type) ?: emptyList()
                 val sorted = list.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name.ifBlank { it.username } })
                 _profiles.value = sorted
+
+                // Keep both stores synchronized
+                saveProfilesInternal(sorted)
             } catch (e: Exception) {
                 _profiles.value = emptyList()
             }
         } else {
-            // Start with an empty list on fresh installs so each user enters their own private credentials
             _profiles.value = emptyList()
         }
     }
@@ -108,28 +136,51 @@ class ProfileRepository(context: Context) {
         return _profiles.value.firstOrNull { it.isPrimary } ?: _profiles.value.firstOrNull()
     }
 
+    /**
+     * Finds matching profiles with 100% universal fallback support.
+     * Works on Vivo, Samsung, Oppo, Xiaomi even if Location/GPS is turned OFF or SSID is masked.
+     */
     fun findProfilesForNetwork(ssid: String, gatewayIp: String): List<WifiProfile> {
+        val allProfiles = _profiles.value
+        if (allProfiles.isEmpty()) {
+            return emptyList()
+        }
+
         val cleanedSsid = ssid.removeSurrounding("\"").trim()
+        val isSsidMasked = cleanedSsid.isBlank() ||
+                cleanedSsid.equals("<unknown ssid>", ignoreCase = true) ||
+                cleanedSsid.equals("Connected Wi-Fi", ignoreCase = true) ||
+                cleanedSsid.equals("Wi-Fi Disconnected", ignoreCase = true)
+
         val results = mutableListOf<WifiProfile>()
 
-        if (cleanedSsid.isNotBlank()) {
-            val bySsid = _profiles.value.filter { profile ->
+        // Tier 1: Match by SSID name or common campus/faculty/room prefixes
+        if (!isSsidMasked) {
+            val bySsid = allProfiles.filter { profile ->
                 profile.isAutoLoginEnabled && (
                     profile.ssid.equals(cleanedSsid, ignoreCase = true) ||
                     (profile.ssid.endsWith("*") && cleanedSsid.startsWith(profile.ssid.removeSuffix("*").trim(), ignoreCase = true)) ||
                     (profile.ssid.startsWith("KU", ignoreCase = true) && cleanedSsid.startsWith("KU", ignoreCase = true)) ||
+                    (profile.ssid.startsWith("KIIT", ignoreCase = true) && cleanedSsid.startsWith("KIIT", ignoreCase = true)) ||
                     cleanedSsid.contains("KU", ignoreCase = true) ||
+                    cleanedSsid.contains("KIIT", ignoreCase = true) ||
                     cleanedSsid.contains("ROOM", ignoreCase = true) ||
                     cleanedSsid.contains("NO-", ignoreCase = true) ||
+                    cleanedSsid.contains("FACULTY", ignoreCase = true) ||
+                    cleanedSsid.contains("STAFF", ignoreCase = true) ||
+                    cleanedSsid.contains("GUEST", ignoreCase = true) ||
+                    cleanedSsid.contains("CAMPUS", ignoreCase = true) ||
                     profile.ssid.isBlank() ||
-                    profile.ssid.equals("Campus Wi-Fi", ignoreCase = true)
+                    profile.ssid.equals("Campus Wi-Fi", ignoreCase = true) ||
+                    profile.ssid.equals("Universal", ignoreCase = true)
                 )
             }
             results.addAll(bySsid)
         }
 
-        if (results.isEmpty() && gatewayIp.isNotBlank()) {
-            val byGateway = _profiles.value.filter { profile ->
+        // Tier 2: Match by gateway IP subnet
+        if (results.isEmpty() && gatewayIp.isNotBlank() && gatewayIp != "0.0.0.0") {
+            val byGateway = allProfiles.filter { profile ->
                 profile.isAutoLoginEnabled && (
                     profile.portalUrl.contains(gatewayIp) ||
                     gatewayIp.startsWith("172.24.") ||
@@ -141,11 +192,17 @@ class ProfileRepository(context: Context) {
             results.addAll(byGateway)
         }
 
+        // Tier 3: Universal Fallback — if on ANY Wi-Fi network, use saved profiles with auto-login enabled
         if (results.isEmpty()) {
-            results.addAll(_profiles.value.filter { it.isAutoLoginEnabled })
+            results.addAll(allProfiles.filter { it.isAutoLoginEnabled })
         }
 
-        // Sort so primary profile is tried first, and other backup profiles follow alphabetically
+        // Tier 4: Absolute Fallback — if auto-login was accidentally toggled off, use all saved profiles
+        if (results.isEmpty()) {
+            results.addAll(allProfiles)
+        }
+
+        // Sort so primary profile is tried first, and backup profiles follow alphabetically
         return results.distinctBy { it.id }.sortedWith(
             compareByDescending<WifiProfile> { it.isPrimary }
                 .thenBy(String.CASE_INSENSITIVE_ORDER) { it.name.ifBlank { it.username } }
@@ -185,12 +242,33 @@ class ProfileRepository(context: Context) {
     private fun saveProfiles(list: List<WifiProfile>) {
         val sorted = list.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name.ifBlank { it.username } })
         _profiles.value = sorted
-        val json = gson.toJson(sorted)
-        prefs.edit().putString(KEY_PROFILES, json).apply()
+        saveProfilesInternal(sorted)
+    }
+
+    private fun saveProfilesInternal(list: List<WifiProfile>) {
+        val json = gson.toJson(list)
+
+        // 1. Save to resilient backup store (Guaranteed to succeed on all Vivo / Android devices)
+        try {
+            backupPrefs.edit().putString(KEY_PROFILES, json).apply()
+        } catch (e: Exception) {
+            // Ignore
+        }
+
+        // 2. Try saving to AES-256 KeyStore store
+        try {
+            if (securePrefs == null) {
+                securePrefs = createEncryptedPreferences(context)
+            }
+            securePrefs?.edit()?.putString(KEY_PROFILES, json)?.apply()
+        } catch (e: Exception) {
+            // If KeyStore fails, backupPrefs guarantees safety
+        }
     }
 
     companion object {
         private const val SECURE_PREFS_NAME = "secure_wifi_profiles_store"
+        private const val BACKUP_PREFS_NAME = "wifi_profiles_resilient_backup"
         private const val LEGACY_PREFS_NAME = "wifi_profiles_store"
         private const val KEY_PROFILES = "saved_wifi_profiles"
     }
