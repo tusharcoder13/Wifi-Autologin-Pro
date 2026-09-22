@@ -51,8 +51,8 @@ class AuthEngine(
         val builder = OkHttpClient.Builder()
             .dispatcher(dispatcher)
             .cookieJar(cookieJar)
-            .connectTimeout(3500, TimeUnit.MILLISECONDS)
-            .readTimeout(3500, TimeUnit.MILLISECONDS)
+            .connectTimeout(2500, TimeUnit.MILLISECONDS)
+            .readTimeout(2500, TimeUnit.MILLISECONDS)
             .followRedirects(true)
             .followSslRedirects(true)
 
