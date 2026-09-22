@@ -58,8 +58,8 @@ class CaptivePortalDetector(private val context: Context) {
      */
     private fun createProbeClient(followRedirects: Boolean = false, bypassSsl: Boolean = true): OkHttpClient {
         val builder = OkHttpClient.Builder()
-            .connectTimeout(1500, TimeUnit.MILLISECONDS)
-            .readTimeout(1500, TimeUnit.MILLISECONDS)
+            .connectTimeout(3000, TimeUnit.MILLISECONDS)
+            .readTimeout(3000, TimeUnit.MILLISECONDS)
             .followRedirects(followRedirects)
             .followSslRedirects(followRedirects)
 

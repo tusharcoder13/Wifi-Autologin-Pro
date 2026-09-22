@@ -51,8 +51,8 @@ class AuthEngine(
         val builder = OkHttpClient.Builder()
             .dispatcher(dispatcher)
             .cookieJar(cookieJar)
-            .connectTimeout(1200, TimeUnit.MILLISECONDS)
-            .readTimeout(1200, TimeUnit.MILLISECONDS)
+            .connectTimeout(3500, TimeUnit.MILLISECONDS)
+            .readTimeout(3500, TimeUnit.MILLISECONDS)
             .followRedirects(true)
             .followSslRedirects(true)
 
@@ -123,7 +123,7 @@ class AuthEngine(
 
         LogRepository.info("Target Endpoint", "Single-shot auth targeted to: $primaryTargetUrl")
 
-        // 2. Perform Single-Shot POST
+        // 2. Perform Single-Shot POST on primary endpoint
         val primaryResult = postSingleAuth(client, primaryTargetUrl, cleanProfile)
         if (primaryResult != null) {
             if (primaryResult.isSuccess) {
@@ -152,9 +152,25 @@ class AuthEngine(
             }
         }
 
+        // 3b. Probe-based Intercepted Portal URL Fallback
+        val probe = detector.probeConnectivity(settings.customProbeUrl, settings.bypassSslErrors)
+        if (probe.portalUrl.isNotBlank() && probe.portalUrl != primaryTargetUrl && probe.portalUrl != fallbackUrl) {
+            LogRepository.info("Intercepted Portal", "Retrying on detected portal: ${probe.portalUrl}")
+            val probeResult = postSingleAuth(client, probe.portalUrl, cleanProfile)
+            if (probeResult != null) {
+                if (probeResult.isSuccess) {
+                    detector.forceDismissCaptivePortalNotification()
+                    detector.blastSocket204Probes()
+                    LogRepository.success("Login Success", "Instant login verified on intercepted portal!")
+                }
+                return@withContext probeResult
+            }
+        }
+
         // 4. Secondary Fallback: Headless WebKit Browser Engine if raw HTTP endpoints were blocked
-        LogRepository.info("Auto-Engine", "Cascading to Headless WebKit Engine on '$primaryTargetUrl' for ${cleanProfile.username}...")
-        val webResult = WebViewLoginEngine.executeHeadlessLogin(context, cleanProfile, detector, primaryTargetUrl)
+        val headlessUrl = if (probe.portalUrl.isNotBlank()) probe.portalUrl else primaryTargetUrl
+        LogRepository.info("Auto-Engine", "Cascading to Headless WebKit Engine on '$headlessUrl' for ${cleanProfile.username}...")
+        val webResult = WebViewLoginEngine.executeHeadlessLogin(context, cleanProfile, detector, headlessUrl)
         if (webResult.isSuccess) {
             detector.forceDismissCaptivePortalNotification()
             detector.blastSocket204Probes()
@@ -164,7 +180,7 @@ class AuthEngine(
         AuthResult(
             isSuccess = false,
             message = if (webResult.message.isNotBlank() && !webResult.message.contains("timed out", ignoreCase = true)) webResult.message else "Login Failed: Server unreachable or credentials rejected (${cleanProfile.username}).",
-            portalTargetUrl = primaryTargetUrl
+            portalTargetUrl = headlessUrl
         )
     }
 
@@ -230,6 +246,7 @@ class AuthEngine(
                 null
             }
         } catch (e: Exception) {
+            LogRepository.info("Direct POST", "POST $url error: ${e.localizedMessage ?: e.javaClass.simpleName}")
             null
         }
     }

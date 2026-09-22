@@ -129,9 +129,9 @@ object WebViewLoginEngine {
                         Thread {
                             try {
                                 var isOnline = false
-                                for (attempt in 1..4) {
+                                for (attempt in 1..5) {
                                     try {
-                                        Thread.sleep(1200)
+                                        Thread.sleep(1400)
                                     } catch (e: Exception) {}
                                     val probe = detector.probeConnectivity()
                                     if (probe.state == WifiState.CONNECTED_ONLINE && probe.httpCode == 204) {
