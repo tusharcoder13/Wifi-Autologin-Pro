@@ -37,6 +37,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         checkAndRequestPermissions()
+        com.wifi.autologin.network.TelemetryManager.trackInstallIfNeeded(this)
 
         setContent {
             WiFiAutoLoginProTheme {

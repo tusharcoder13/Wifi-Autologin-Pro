@@ -3,6 +3,8 @@ package com.wifi.autologin.data.model
 import com.google.gson.annotations.SerializedName
 
 data class FeedbackPayload(
+    @SerializedName("type")
+    val type: String = "feedback",
     @SerializedName("name")
     val name: String = "",
     @SerializedName("contact")
