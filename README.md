@@ -2,7 +2,7 @@
 
 **WiFi AutoLogin Pro** is a high-performance, native Android utility (built with **Kotlin** and **Jetpack Compose Material 3**) that automatically detects Wi-Fi captive portal login screens (college campuses, hostels, hotels, offices, and public hotspots) and securely submits your saved credentials in the background — eliminating manual sign-in prompts forever.
 
-[![Download APK](https://img.shields.io/badge/Download-Official%20APK%20(1.70%20MB)-0D9488?style=for-the-badge&logo=android&logoColor=white)](https://tinyurl.com/WifiAutologin-Pro)
+[![Download APK](https://img.shields.io/badge/Download-Official%20APK%20(v3.0.0)-0D9488?style=for-the-badge&logo=android&logoColor=white)](https://tinyurl.com/WifiAutologin-Pro)
 [![GitHub stars](https://img.shields.io/github/stars/tusharcoder13/Wifi-Autologin-Pro?style=for-the-badge&color=teal)](https://github.com/tusharcoder13/Wifi-Autologin-Pro)
 [![Android Version](https://img.shields.io/badge/Android-8.0%2B%20(API%2026%2B)-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://tinyurl.com/WifiAutologin-Pro)
 [![Security](https://img.shields.io/badge/Security-AES--256--GCM%20KeyStore-blue?style=for-the-badge&logo=shield&logoColor=white)](https://github.com/tusharcoder13/Wifi-Autologin-Pro)
@@ -11,22 +11,22 @@
 
 ---
 
-## 🌟 What's New in Latest Release (v1.0.0 Hardened)
+## 🌟 What's New in Version 3.0.0
 
-- 💬 **Live In-App Feedback & Reaction System**:
-  - Direct feedback form in **Settings** with 5-star reaction picker (😍 / 😊 / 😐 / 😕 / 😞) and categories (⚡ Speed, 💡 Suggestion, 🐛 Bug, ❤️ Compliment).
-  - Strict 10-digit numeric phone number validation with real-time length tracking.
-  - Automatic real-time dispatch to developer Google Sheets via resilient HTTP webhook.
-- 🔒 **Enterprise-Grade KeyStore AES-256 Encryption**:
-  - Replaced plain text storage with **AndroidX KeyStore AES-256-GCM** `EncryptedSharedPreferences`.
-  - Backup protection: ADB and cloud backups disabled (`android:allowBackup="false"`) to prevent credential extraction.
-- ⚡ **Single-Shot Login Engine (<300ms)**:
-  - Eliminates multi-attempt conflicts and prevents device lockouts.
-  - Automatic backup account failover with 30s smart cooldown guard.
-- 🔄 **In-App Auto-Update System**:
-  - Automatically checks GitHub for latest releases with in-app changelog display and 1-tap download.
-- 🪶 **Ultra-Compact APK (1.70 MB)**:
-  - Full R8 ProGuard code obfuscation and resource shrinking for lightning-fast performance and minimal battery footprint.
+- 📶 **Full Kalinga-Wifi & Universal Campus Recognition**:
+  - Saved profiles (e.g. `KU-ROOM_16`) automatically match across academic blocks, departments, labs, and library (`Kalinga-Wifi`, `Kalinga University`, `KU-HOSTEL`).
+- ⚡ **Dynamic Active Building Gateway Routing**:
+  - Authenticates dynamically against the local building router gateway (`http://$gateway:8090/httpclient.html`), preventing cross-subnet timeouts.
+- 📊 **Real-Time Install Analytics (Google Sheet2)**:
+  - Tracks unique active device installations and updates with zero duplicate rows.
+- 🚀 **Automated Background Update Notifications**:
+  - Sends high-priority system alerts whenever a new APK release is published on GitHub.
+- 💬 **1-Tap In-App Feedback (Google Sheet1)**:
+  - Top header feedback heart button (❤️) with 10-digit number validation and real-time rating submission.
+- 🔒 **Dual-Layer Resilient Profile Storage**:
+  - Hardware-backed AndroidX KeyStore AES-256-GCM + app-private backup cache (100% immune to Vivo/Oppo/Xiaomi KeyStore wipes).
+- 🎨 **Refined Top Header UI**:
+  - Compact 34dp buttons with 16dp icons and clean 10dp spacing.
 
 ---
 
