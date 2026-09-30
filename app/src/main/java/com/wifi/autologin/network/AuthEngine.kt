@@ -108,53 +108,54 @@ class AuthEngine(
         val currentIp = detector.getCurrentIpAddress()
         val cleanProfile = profile
 
-        // 1. Determine primary targeted endpoint
-        val primaryTargetUrl = when {
-            cleanProfile.portalUrl.isNotBlank() && cleanProfile.portalUrl.startsWith("http") ->
-                cleanProfile.portalUrl
-            gateway.isNotBlank() && gateway != "0.0.0.0" && gateway != "127.0.0.1" ->
-                "http://$gateway:8090/httpclient.html"
-            currentIp.isNotBlank() && currentIp != "0.0.0.0" -> {
-                val parts = currentIp.split(".")
-                if (parts.size == 4) "http://${parts[0]}.${parts[1]}.${parts[2]}.1:8090/httpclient.html" else "http://172.24.16.1:8090/httpclient.html"
-            }
-            else -> "http://172.24.16.1:8090/httpclient.html"
+        // 1. Build prioritized list of endpoints to attempt:
+        val endpointsToTry = mutableListOf<String>()
+
+        // Priority 1: Current active gateway IP on the connected Wi-Fi (e.g. Kalinga-Wifi, KU-ROOM)
+        if (gateway.isNotBlank() && gateway != "0.0.0.0" && gateway != "127.0.0.1") {
+            endpointsToTry.add("http://$gateway:8090/httpclient.html")
         }
+
+        // Priority 2: Custom portal URL saved in profile (if explicitly set and valid)
+        if (cleanProfile.portalUrl.isNotBlank() && cleanProfile.portalUrl.startsWith("http")) {
+            endpointsToTry.add(cleanProfile.portalUrl)
+        }
+
+        // Priority 3: Subnet .1 gateway IP
+        if (currentIp.isNotBlank() && currentIp != "0.0.0.0") {
+            val parts = currentIp.split(".")
+            if (parts.size == 4) {
+                endpointsToTry.add("http://${parts[0]}.${parts[1]}.${parts[2]}.1:8090/httpclient.html")
+            }
+        }
+
+        // Priority 4: Default campus cluster gateway fallback
+        endpointsToTry.add("http://172.24.16.1:8090/httpclient.html")
+
+        val distinctEndpoints = endpointsToTry.distinct()
+        val primaryTargetUrl = distinctEndpoints.first()
 
         LogRepository.info("Target Endpoint", "Single-shot auth targeted to: $primaryTargetUrl")
 
-        // 2. Perform Single-Shot POST on primary endpoint
-        val primaryResult = postSingleAuth(client, primaryTargetUrl, cleanProfile)
-        if (primaryResult != null) {
-            if (primaryResult.isSuccess) {
-                detector.forceDismissCaptivePortalNotification()
-                detector.blastSocket204Probes()
-                LogRepository.success("Login Success", "Instant login verified on $primaryTargetUrl!")
-                return@withContext primaryResult
-            } else {
-                // Return explicit error (e.g. limit reached, wrong password) immediately for fast failover
-                return@withContext primaryResult
-            }
-        }
-
-        // 3. Fallback: If primary target gateway timed out/failed, try default campus cluster gateway once
-        val fallbackUrl = "http://172.24.16.1:8090/httpclient.html"
-        if (primaryTargetUrl != fallbackUrl) {
-            LogRepository.info("Fallback Gateway", "Retrying on campus cluster gateway: $fallbackUrl")
-            val fallbackResult = postSingleAuth(client, fallbackUrl, cleanProfile)
-            if (fallbackResult != null) {
-                if (fallbackResult.isSuccess) {
+        // 2. Perform Single-Shot POST on endpoints in priority order
+        for (targetUrl in distinctEndpoints) {
+            val result = postSingleAuth(client, targetUrl, cleanProfile)
+            if (result != null) {
+                if (result.isSuccess) {
                     detector.forceDismissCaptivePortalNotification()
                     detector.blastSocket204Probes()
-                    LogRepository.success("Login Success", "Instant login verified on fallback gateway!")
+                    LogRepository.success("Login Success", "Instant login verified on $targetUrl!")
+                    return@withContext result
+                } else {
+                    // Explicit failure (e.g. wrong password / limit reached)
+                    return@withContext result
                 }
-                return@withContext fallbackResult
             }
         }
 
-        // 3b. Probe-based Intercepted Portal URL Fallback
+        // 3. Probe-based Intercepted Portal URL Fallback
         val probe = detector.probeConnectivity(settings.customProbeUrl, settings.bypassSslErrors)
-        if (probe.portalUrl.isNotBlank() && probe.portalUrl != primaryTargetUrl && probe.portalUrl != fallbackUrl) {
+        if (probe.portalUrl.isNotBlank() && !distinctEndpoints.contains(probe.portalUrl)) {
             LogRepository.info("Intercepted Portal", "Retrying on detected portal: ${probe.portalUrl}")
             val probeResult = postSingleAuth(client, probe.portalUrl, cleanProfile)
             if (probeResult != null) {
@@ -162,8 +163,10 @@ class AuthEngine(
                     detector.forceDismissCaptivePortalNotification()
                     detector.blastSocket204Probes()
                     LogRepository.success("Login Success", "Instant login verified on intercepted portal!")
+                    return@withContext probeResult
+                } else {
+                    return@withContext probeResult
                 }
-                return@withContext probeResult
             }
         }
 

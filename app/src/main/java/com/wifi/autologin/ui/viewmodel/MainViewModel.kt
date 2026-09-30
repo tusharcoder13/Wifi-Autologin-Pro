@@ -129,8 +129,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val ssid = detector.getCurrentSsid()
             val ip = detector.getCurrentIpAddress()
             val gateway = detector.getGatewayIpAddress()
-            val matchingProfiles = profileRepo.findProfilesForNetwork(ssid, gateway)
-            val matchedProfile = matchingProfiles.firstOrNull()
+            var matchingProfiles = profileRepo.findProfilesForNetwork(ssid, gateway)
+            if (matchingProfiles.isEmpty()) {
+                matchingProfiles = profileRepo.profiles.value
+            }
+            val matchedProfile = matchingProfiles.firstOrNull() ?: profileRepo.getPrimaryProfile()
 
             val probe = detector.probeConnectivity(
                 settings.value.customProbeUrl,

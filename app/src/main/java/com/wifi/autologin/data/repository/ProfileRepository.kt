@@ -138,9 +138,13 @@ class ProfileRepository(private val context: Context) {
 
     /**
      * Finds matching profiles with 100% universal fallback support.
-     * Works on Vivo, Samsung, Oppo, Xiaomi even if Location/GPS is turned OFF or SSID is masked.
+     * Works on Vivo, Samsung, Oppo, Xiaomi even if Location/GPS is turned OFF, SSID is masked,
+     * or network switches between Hostel (KU-ROOM) and Campus (Kalinga-Wifi).
      */
     fun findProfilesForNetwork(ssid: String, gatewayIp: String): List<WifiProfile> {
+        if (_profiles.value.isEmpty()) {
+            loadProfiles()
+        }
         val allProfiles = _profiles.value
         if (allProfiles.isEmpty()) {
             return emptyList()
@@ -154,39 +158,70 @@ class ProfileRepository(private val context: Context) {
 
         val results = mutableListOf<WifiProfile>()
 
-        // Tier 1: Match by SSID name or common campus/faculty/room prefixes
+        // Check if the connected SSID is a campus/university network (e.g. Kalinga-Wifi, KU-ROOM, KIIT, etc.)
+        val isCampusNetwork = cleanedSsid.contains("KALINGA", ignoreCase = true) ||
+                cleanedSsid.contains("KU", ignoreCase = true) ||
+                cleanedSsid.contains("KIIT", ignoreCase = true) ||
+                cleanedSsid.contains("ROOM", ignoreCase = true) ||
+                cleanedSsid.contains("HOSTEL", ignoreCase = true) ||
+                cleanedSsid.contains("CAMPUS", ignoreCase = true) ||
+                cleanedSsid.contains("UNIVERSITY", ignoreCase = true) ||
+                cleanedSsid.contains("FACULTY", ignoreCase = true) ||
+                cleanedSsid.contains("STAFF", ignoreCase = true) ||
+                cleanedSsid.contains("STUDENT", ignoreCase = true) ||
+                cleanedSsid.contains("GUEST", ignoreCase = true) ||
+                cleanedSsid.contains("LIBRARY", ignoreCase = true) ||
+                cleanedSsid.contains("ADMIN", ignoreCase = true) ||
+                cleanedSsid.contains("DEPT", ignoreCase = true) ||
+                cleanedSsid.contains("OFFICE", ignoreCase = true) ||
+                cleanedSsid.contains("LAB", ignoreCase = true) ||
+                cleanedSsid.contains("BLOCK", ignoreCase = true) ||
+                cleanedSsid.contains("FLOOR", ignoreCase = true) ||
+                cleanedSsid.contains("TOWER", ignoreCase = true) ||
+                cleanedSsid.contains("NO-", ignoreCase = true) ||
+                cleanedSsid.contains("WIFI", ignoreCase = true)
+
+        // Tier 1: Match by SSID name, exact match, prefix, wildcard, or university network keywords
         if (!isSsidMasked) {
             val bySsid = allProfiles.filter { profile ->
+                val profileSsid = profile.ssid.trim()
                 profile.isAutoLoginEnabled && (
-                    profile.ssid.equals(cleanedSsid, ignoreCase = true) ||
-                    (profile.ssid.endsWith("*") && cleanedSsid.startsWith(profile.ssid.removeSuffix("*").trim(), ignoreCase = true)) ||
-                    (profile.ssid.startsWith("KU", ignoreCase = true) && cleanedSsid.startsWith("KU", ignoreCase = true)) ||
-                    (profile.ssid.startsWith("KIIT", ignoreCase = true) && cleanedSsid.startsWith("KIIT", ignoreCase = true)) ||
-                    cleanedSsid.contains("KU", ignoreCase = true) ||
-                    cleanedSsid.contains("KIIT", ignoreCase = true) ||
-                    cleanedSsid.contains("ROOM", ignoreCase = true) ||
-                    cleanedSsid.contains("NO-", ignoreCase = true) ||
-                    cleanedSsid.contains("FACULTY", ignoreCase = true) ||
-                    cleanedSsid.contains("STAFF", ignoreCase = true) ||
-                    cleanedSsid.contains("GUEST", ignoreCase = true) ||
-                    cleanedSsid.contains("CAMPUS", ignoreCase = true) ||
-                    profile.ssid.isBlank() ||
-                    profile.ssid.equals("Campus Wi-Fi", ignoreCase = true) ||
-                    profile.ssid.equals("Universal", ignoreCase = true)
+                    profileSsid.equals(cleanedSsid, ignoreCase = true) ||
+                    (profileSsid.endsWith("*") && cleanedSsid.startsWith(profileSsid.removeSuffix("*").trim(), ignoreCase = true)) ||
+                    (profileSsid.isNotBlank() && cleanedSsid.contains(profileSsid, ignoreCase = true)) ||
+                    (cleanedSsid.isNotBlank() && profileSsid.contains(cleanedSsid, ignoreCase = true)) ||
+                    (isCampusNetwork && (
+                        profileSsid.contains("KU", ignoreCase = true) ||
+                        profileSsid.contains("KALINGA", ignoreCase = true) ||
+                        profileSsid.contains("ROOM", ignoreCase = true) ||
+                        profileSsid.contains("HOSTEL", ignoreCase = true) ||
+                        profileSsid.contains("CAMPUS", ignoreCase = true) ||
+                        profileSsid.contains("UNIVERSAL", ignoreCase = true) ||
+                        profileSsid.isBlank() ||
+                        profileSsid.equals("Campus Wi-Fi", ignoreCase = true) ||
+                        profile.presetType == "KALINGA_UNIVERSITY" ||
+                        profile.presetType == "CYBEROAM" ||
+                        profile.presetType == "SOPHOS"
+                    )) ||
+                    profileSsid.isBlank() ||
+                    profileSsid.equals("Campus Wi-Fi", ignoreCase = true) ||
+                    profileSsid.equals("Universal", ignoreCase = true)
                 )
             }
             results.addAll(bySsid)
         }
 
-        // Tier 2: Match by gateway IP subnet
+        // Tier 2: Match by gateway IP subnet (covers all private IP ranges: 172.16-31.x.x, 10.x.x.x, 192.168.x.x, 100.x.x.x)
         if (results.isEmpty() && gatewayIp.isNotBlank() && gatewayIp != "0.0.0.0") {
+            val isPrivateSubnet = gatewayIp.startsWith("172.") ||
+                    gatewayIp.startsWith("10.") ||
+                    gatewayIp.startsWith("192.168.") ||
+                    gatewayIp.startsWith("100.")
+
             val byGateway = allProfiles.filter { profile ->
                 profile.isAutoLoginEnabled && (
                     profile.portalUrl.contains(gatewayIp) ||
-                    gatewayIp.startsWith("172.24.") ||
-                    gatewayIp.startsWith("172.16.") ||
-                    gatewayIp.startsWith("192.168.") ||
-                    gatewayIp.startsWith("10.")
+                    isPrivateSubnet
                 )
             }
             results.addAll(byGateway)

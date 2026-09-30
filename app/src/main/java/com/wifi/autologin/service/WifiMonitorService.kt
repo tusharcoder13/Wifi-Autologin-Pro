@@ -367,8 +367,11 @@ class WifiMonitorService : Service() {
 
             if (!detector.isWifiConnected()) return
 
-            val matchingProfiles = profileRepository.findProfilesForNetwork(currentSsid, gatewayIp)
-            val matchedProfile = matchingProfiles.firstOrNull()
+            var matchingProfiles = profileRepository.findProfilesForNetwork(currentSsid, gatewayIp)
+            if (matchingProfiles.isEmpty()) {
+                matchingProfiles = profileRepository.profiles.value
+            }
+            val matchedProfile = matchingProfiles.firstOrNull() ?: profileRepository.getPrimaryProfile()
 
             // Exact dynamic SSID resolution (KU_NO-17, KU-ROOM_16, etc.)
             val activeNetworkName = if (currentSsid.isNotBlank() && currentSsid != "<unknown ssid>") {
