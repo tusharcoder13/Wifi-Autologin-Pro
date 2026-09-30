@@ -9,6 +9,7 @@ import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.net.*
+import android.net.Uri
 import android.net.wifi.WifiInfo
 import android.net.wifi.WifiManager
 import android.os.Build
@@ -17,12 +18,14 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.wifi.autologin.MainActivity
 import com.wifi.autologin.R
+import com.wifi.autologin.data.model.UpdateInfo
 import com.wifi.autologin.data.model.WifiState
 import com.wifi.autologin.data.repository.AppSettingsRepository
 import com.wifi.autologin.data.repository.LogRepository
 import com.wifi.autologin.data.repository.ProfileRepository
 import com.wifi.autologin.network.AuthEngine
 import com.wifi.autologin.network.CaptivePortalDetector
+import com.wifi.autologin.network.UpdateManager
 import kotlinx.coroutines.*
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -43,6 +46,7 @@ class WifiMonitorService : Service() {
     private var lastNotifiedSuccessNetwork: String? = null
     private var lastNotifiedSuccessTime: Long = 0L
     private var lastLimitReachedTimestamp: Long = 0L
+    private var lastUpdateCheckTime: Long = 0L
 
     companion object {
         const val CHANNEL_SILENT_DAEMON = "wifi_autologin_silent_daemon_v3"
@@ -51,6 +55,7 @@ class WifiMonitorService : Service() {
         const val NOTIFICATION_ID = 1001
         const val SUCCESS_NOTIFICATION_ID = 1002
         const val ERROR_NOTIFICATION_ID = 1003
+        const val UPDATE_NOTIFICATION_ID = 1004
         const val ACTION_MANUAL_LOGIN = "com.wifi.autologin.ACTION_MANUAL_LOGIN"
         const val ACTION_FORCE_RELEASE_LOGIN = "com.wifi.autologin.ACTION_FORCE_RELEASE_LOGIN"
         private const val LIMIT_REACHED_COOLDOWN_MS = 30_000L
@@ -122,6 +127,7 @@ class WifiMonitorService : Service() {
         if (wifiNet != null) {
             bindNetworkAndTrigger(wifiNet, isCaptiveHint = false)
         }
+        checkBackgroundUpdate()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -440,6 +446,7 @@ class WifiMonitorService : Service() {
 
                     // Rapid non-blocking multi-pulse OS network revalidation to instantly dismiss "Sign in to Wi-Fi network"
                     triggerImmediateNetworkRevalidation()
+                    checkBackgroundUpdate()
 
                     val realName = detector.getCurrentSsid().ifBlank { activeNetworkName }
 
@@ -661,6 +668,56 @@ class WifiMonitorService : Service() {
         }
 
         notificationManager.notify(ERROR_NOTIFICATION_ID, notificationBuilder.build())
+    }
+
+    private fun showUpdateNotification(update: UpdateInfo) {
+        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val downloadIntent = Intent(Intent.ACTION_VIEW, Uri.parse(update.downloadUrl.ifBlank { "https://tinyurl.com/WifiAutologin-Pro" })).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            this, 2, downloadIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val cleanNotes = if (update.releaseNotes.isNotBlank()) update.releaseNotes.take(200) else "New features and stability updates are ready."
+
+        val notification = NotificationCompat.Builder(this, CHANNEL_ERRORS)
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setContentTitle("🚀 Update Available: v${update.versionName}")
+            .setContentText("Tap to download the latest update (${update.versionName})")
+            .setStyle(NotificationCompat.BigTextStyle().bigText("WiFi AutoLogin Pro v${update.versionName} is available!\n\n$cleanNotes\n\nTap to download."))
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
+            .setOngoing(false)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .build()
+
+        notificationManager.notify(UPDATE_NOTIFICATION_ID, notification)
+    }
+
+    private fun checkBackgroundUpdate() {
+        if (System.currentTimeMillis() - lastUpdateCheckTime < 2 * 60 * 60 * 1000L) return
+        lastUpdateCheckTime = System.currentTimeMillis()
+
+        serviceScope.launch {
+            try {
+                val pInfo = try { packageManager.getPackageInfo(packageName, 0) } catch (e: Exception) { null }
+                val currentCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    pInfo?.longVersionCode?.toInt() ?: 3
+                } else {
+                    @Suppress("DEPRECATION")
+                    pInfo?.versionCode ?: 3
+                }
+
+                val update = UpdateManager.fetchLatestUpdate(currentCode)
+                if (update != null && update.versionCode > currentCode) {
+                    showUpdateNotification(update)
+                }
+            } catch (e: Exception) {
+                // Ignore
+            }
+        }
     }
 
     private fun createNotificationChannel() {
