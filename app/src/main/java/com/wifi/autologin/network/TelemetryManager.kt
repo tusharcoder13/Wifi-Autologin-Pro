@@ -45,7 +45,7 @@ object TelemetryManager {
         }
 
         val lastReportedVersion = prefs.getInt(KEY_REPORTED_VERSION, 0)
-        val currentVersionCode = 2 // v2.0.0
+        val currentVersionCode = 3 // v3.0.0
 
         if (lastReportedVersion < currentVersionCode) {
             val eventType = if (isFirstLaunch) "NEW_INSTALL" else "APP_UPDATE"
@@ -60,7 +60,7 @@ object TelemetryManager {
                 event = eventType,
                 deviceModel = deviceModel,
                 androidVersion = androidVersion,
-                appVersion = "2.0.0",
+                appVersion = "3.0.0",
                 timestamp = System.currentTimeMillis()
             )
 

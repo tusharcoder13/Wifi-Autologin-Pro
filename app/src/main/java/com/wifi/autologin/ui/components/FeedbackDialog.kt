@@ -318,7 +318,7 @@ fun FeedbackDialog(
                                     message = message.trim(),
                                     deviceModel = "${Build.MANUFACTURER} ${Build.MODEL}",
                                     androidVersion = "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})",
-                                    appVersion = "2.0.0"
+                                    appVersion = "3.0.0"
                                 )
                                 onSubmit(payload)
                                 isSubmitted = true

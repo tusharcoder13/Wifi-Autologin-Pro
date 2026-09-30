@@ -1,6 +1,6 @@
 {
-  "versionCode": 2,
-  "versionName": "2.0.0",
-  "releaseNotes": "• Full Vivo / Funtouch OS compatibility & auto-recovery\n• Universal Wi-Fi auto-login (works even with Location/GPS off)\n• Dual-Layer Resilient Profile Storage (zero credential loss)\n• Added 1-tap Feedback & Reaction button on Home screen\n• Enhanced 10-digit number validation for direct support",
+  "versionCode": 3,
+  "versionName": "3.0.0",
+  "releaseNotes": "• Kalinga-Wifi & Campus-wide universal network auto-detection\n• Dynamic active building gateway routing (zero login timeouts)\n• Live In-App Telemetry & Real-Time Install Analytics (Sheet2)\n• Dual-Layer Resilient Profile Storage (100% Vivo/Oppo/Xiaomi safe)\n• Top-bar In-App Feedback (❤️) & refined UI spacing",
   "downloadUrl": "https://tinyurl.com/WifiAutologin-Pro"
 }

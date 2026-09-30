@@ -20,7 +20,7 @@ data class FeedbackPayload(
     @SerializedName("androidVersion")
     val androidVersion: String = "",
     @SerializedName("appVersion")
-    val appVersion: String = "2.0.0",
+    val appVersion: String = "3.0.0",
     @SerializedName("ssid")
     val ssid: String = "",
     @SerializedName("timestamp")
