@@ -123,35 +123,65 @@ object WebViewLoginEngine {
 
                     view?.evaluateJavascript(jsContinuousInjection, null)
 
+                    // Also check for DOM login success indicators
+                    view?.evaluateJavascript("(function(){ return document.body ? document.body.innerText : ''; })();") { bodyText ->
+                        if (bodyText != null) {
+                            val cleanText = bodyText.lowercase()
+                            val isDomSuccess = cleanText.contains("successfully logged in") ||
+                                    cleanText.contains("you are signed in") ||
+                                    cleanText.contains("successfully signed in") ||
+                                    cleanText.contains("logged in") && cleanText.contains("logout")
+                            if (isDomSuccess && !resultDeferred.isCompleted) {
+                                LogRepository.success("Auto-Login Success!", "Portal confirmed login via page response.")
+                                resultDeferred.complete(
+                                    AuthResult(
+                                        isSuccess = true,
+                                        httpCode = 200,
+                                        message = "Hands-free auto-login successful!",
+                                        portalTargetUrl = currentUrl
+                                    )
+                                )
+                            }
+                        }
+                    }
+
                     if (!formSubmitted) {
                         formSubmitted = true
-                        // Start background probe verification
+                        // Start extended background probe verification (8 attempts with progressive backoff up to 14s)
                         Thread {
                             try {
                                 var isOnline = false
-                                for (attempt in 1..5) {
+                                val intervals = longArrayOf(1000L, 1200L, 1500L, 1800L, 2000L, 2000L, 2000L, 2000L)
+                                for (attempt in 1..intervals.size) {
+                                    if (resultDeferred.isCompleted) {
+                                        isOnline = true
+                                        break
+                                    }
                                     try {
-                                        Thread.sleep(1400)
+                                        Thread.sleep(intervals[attempt - 1])
                                     } catch (e: Exception) {}
+                                    
                                     val probe = detector.probeConnectivity()
                                     if (probe.state == WifiState.CONNECTED_ONLINE && probe.httpCode == 204) {
                                         isOnline = true
-                                        LogRepository.success("Auto-Login Success!", "Internet unblocked hands-free on attempt #$attempt!")
-                                        resultDeferred.complete(
-                                            AuthResult(
-                                                isSuccess = true,
-                                                httpCode = 200,
-                                                message = "Hands-free auto-login successful!",
-                                                portalTargetUrl = currentUrl
+                                        LogRepository.success("Auto-Login Success!", "Internet unblocked on attempt #$attempt (${attempt * 1.5}s)!")
+                                        if (!resultDeferred.isCompleted) {
+                                            resultDeferred.complete(
+                                                AuthResult(
+                                                    isSuccess = true,
+                                                    httpCode = 200,
+                                                    message = "Hands-free auto-login successful!",
+                                                    portalTargetUrl = currentUrl
+                                                )
                                             )
-                                        )
+                                        }
                                         break
                                     } else {
-                                        LogRepository.info("Handshake Probe", "Probe #$attempt: State ${probe.state}")
+                                        LogRepository.info("Handshake Probe", "Probe #$attempt: State ${probe.state} (${probe.httpCode})")
                                     }
                                 }
 
-                                if (!isOnline) {
+                                if (!isOnline && !resultDeferred.isCompleted) {
                                     resultDeferred.complete(
                                         AuthResult(
                                             isSuccess = false,
@@ -162,14 +192,16 @@ object WebViewLoginEngine {
                                     )
                                 }
                             } catch (e: Exception) {
-                                resultDeferred.complete(
-                                    AuthResult(
-                                        isSuccess = false,
-                                        httpCode = 0,
-                                        message = "Verification error: ${e.localizedMessage}",
-                                        portalTargetUrl = currentUrl
+                                if (!resultDeferred.isCompleted) {
+                                    resultDeferred.complete(
+                                        AuthResult(
+                                            isSuccess = false,
+                                            httpCode = 0,
+                                            message = "Verification error: ${e.localizedMessage}",
+                                            portalTargetUrl = currentUrl
+                                        )
                                     )
-                                )
+                                }
                             }
                         }.start()
                     }

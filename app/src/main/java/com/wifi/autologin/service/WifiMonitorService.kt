@@ -486,9 +486,31 @@ class WifiMonitorService : Service() {
 
             if (!loginSuccess) {
                 updateNotification("Monitoring Wi-Fi networks in background...")
-                if (settings.showNotifications) {
-                    val displayError = if (lastErrorMessage.isNotBlank()) lastErrorMessage else "Authentication failed. Check your saved username/password."
-                    showErrorNotification(activeNetworkName, displayError)
+
+                val isDelayedHandshake = lastErrorMessage.contains("awaiting gateway handshake", ignoreCase = true) ||
+                        lastErrorMessage.contains("timed out", ignoreCase = true)
+
+                var isActuallyOnline = false
+                if (isDelayedHandshake) {
+                    val finalProbe = detector.probeConnectivity(settings.customProbeUrl, settings.bypassSslErrors)
+                    if (finalProbe.state == WifiState.CONNECTED_ONLINE && finalProbe.httpCode == 204) {
+                        isActuallyOnline = true
+                        triggerImmediateNetworkRevalidation()
+                        val realName = detector.getCurrentSsid().ifBlank { activeNetworkName }
+                        if (settings.showNotifications) {
+                            showSuccessNotification(realName, "Connected & Online")
+                        }
+                    }
+                }
+
+                if (!isActuallyOnline && settings.showNotifications) {
+                    // Only show persistent error notification for explicit failures (wrong password, limit reached, etc.)
+                    if (!isDelayedHandshake) {
+                        val displayError = if (lastErrorMessage.isNotBlank()) lastErrorMessage else "Authentication failed. Check your saved username/password."
+                        showErrorNotification(activeNetworkName, displayError)
+                    } else {
+                        LogRepository.info("Gateway Note", "Gateway handshake is delayed on $activeNetworkName. Monitoring in background.")
+                    }
                 }
             }
 
