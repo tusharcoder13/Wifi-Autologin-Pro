@@ -504,13 +504,12 @@ class WifiMonitorService : Service() {
                 }
 
                 if (!isActuallyOnline && settings.showNotifications) {
-                    // Only show persistent error notification for explicit failures (wrong password, limit reached, etc.)
-                    if (!isDelayedHandshake) {
-                        val displayError = if (lastErrorMessage.isNotBlank()) lastErrorMessage else "Authentication failed. Check your saved username/password."
-                        showErrorNotification(activeNetworkName, displayError)
-                    } else {
-                        LogRepository.info("Gateway Note", "Gateway handshake is delayed on $activeNetworkName. Monitoring in background.")
+                    val displayError = when {
+                        isDelayedHandshake -> "Gateway Unresponsive: Credentials submitted, but router handshake did not complete within 14s. Tap to retry."
+                        lastErrorMessage.isNotBlank() -> lastErrorMessage
+                        else -> "Authentication failed. Check your saved username/password."
                     }
+                    showErrorNotification(activeNetworkName, displayError)
                 }
             }
 
@@ -686,6 +685,19 @@ class WifiMonitorService : Service() {
                 R.drawable.ic_wifi_tile,
                 "⚡ Release Old Session & Login",
                 kickPendingIntent
+            )
+        } else {
+            val retryIntent = Intent(this, WifiMonitorService::class.java).apply {
+                action = ACTION_MANUAL_LOGIN
+            }
+            val retryPendingIntent = PendingIntent.getService(
+                this, 3, retryIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            notificationBuilder.addAction(
+                R.drawable.ic_wifi_tile,
+                "🔄 Retry Auto-Login",
+                retryPendingIntent
             )
         }
 
