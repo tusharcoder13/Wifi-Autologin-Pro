@@ -155,6 +155,7 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         WifiMonitorService.start(this)
         viewModel.refreshConnectionStatus()
+        viewModel.flushPendingFeedback()
     }
 
     private fun checkAndRequestPermissions() {

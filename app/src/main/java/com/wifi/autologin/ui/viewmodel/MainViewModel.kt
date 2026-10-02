@@ -334,7 +334,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun submitFeedback(payload: com.wifi.autologin.data.model.FeedbackPayload) {
         viewModelScope.launch(Dispatchers.IO) {
-            com.wifi.autologin.network.FeedbackManager.submitFeedback(payload)
+            com.wifi.autologin.network.FeedbackManager.submitFeedback(getApplication(), payload)
+        }
+    }
+
+    fun flushPendingFeedback() {
+        viewModelScope.launch(Dispatchers.IO) {
+            com.wifi.autologin.network.FeedbackManager.flushQueuedFeedback(getApplication())
         }
     }
 }

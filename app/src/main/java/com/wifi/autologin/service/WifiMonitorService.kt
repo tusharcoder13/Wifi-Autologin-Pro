@@ -213,6 +213,9 @@ class WifiMonitorService : Service() {
             bindNetworkAndTrigger(network, isCaptiveHint = true)
         } else if (isValidated) {
             LogRepository.success("Network Validated", "Android OS confirmed full internet access on $currentSsid (Icon verified).")
+            serviceScope.launch {
+                com.wifi.autologin.network.FeedbackManager.flushQueuedFeedback(applicationContext)
+            }
         }
     }
 
@@ -520,6 +523,13 @@ class WifiMonitorService : Service() {
         } catch (e: Exception) {
             LogRepository.error("AutoLogin Error", "Error executing auto-login: ${e.localizedMessage}")
         } finally {
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    connectivityManager.bindProcessToNetwork(null)
+                }
+            } catch (e: Exception) {
+                // Ignore
+            }
             isLoggingIn.set(false)
         }
     }
