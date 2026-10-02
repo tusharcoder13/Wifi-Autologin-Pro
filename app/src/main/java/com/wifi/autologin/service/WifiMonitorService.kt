@@ -14,6 +14,7 @@ import android.net.wifi.WifiInfo
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.IBinder
+import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.wifi.autologin.MainActivity
@@ -163,68 +164,27 @@ class WifiMonitorService : Service() {
             .build()
 
         val hasLocationPerm = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
-        val flag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && hasLocationPerm) {
-            ConnectivityManager.NetworkCallback.FLAG_INCLUDE_LOCATION_INFO
-        } else {
-            0
+        val callback = try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && hasLocationPerm) {
+                Api31NetworkCallbackHelper.createCallback(
+                    onAvailable = { onNetworkAvailable(it) },
+                    onCapabilitiesChanged = { net, caps -> onNetworkCapabilitiesChanged(net, caps) },
+                    onLost = { onNetworkLost(it) }
+                )
+            } else {
+                createLegacyCallback()
+            }
+        } catch (t: Throwable) {
+            createLegacyCallback()
         }
 
-        val callbackHandler = object : ConnectivityManager.NetworkCallback(flag) {
-            override fun onAvailable(network: Network) {
-                LogRepository.info("Wi-Fi Connected", "Detected Wi-Fi network interface.")
-                extractSsidFromNetwork(network)
-                bindNetworkAndTrigger(network, isCaptiveHint = false)
-            }
-
-            override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
-                extractSsidFromCapabilities(capabilities)
-
-                val currentSsid = detector.getCurrentSsid().ifBlank { "Wi-Fi" }
-                val hasCaptive = capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_CAPTIVE_PORTAL)
-                val isValidated = capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
-
-                if (hasCaptive) {
-                    LogRepository.warning("Captive Detected", "OS detected captive portal lock on $currentSsid.")
-                    bindNetworkAndTrigger(network, isCaptiveHint = true)
-                } else if (isValidated) {
-                    LogRepository.success("Network Validated", "Android OS confirmed full internet access on $currentSsid (Icon verified).")
-                }
-            }
-
-            override fun onLost(network: Network) {
-                CaptivePortalDetector.latestSsid = ""
-                lastNotifiedSuccessNetwork = null
-                LogRepository.info("Wi-Fi Lost", "Disconnected from Wi-Fi.")
-                updateNotification("Monitoring Wi-Fi networks in background...")
-            }
-        }
-
-        networkCallback = callbackHandler
+        networkCallback = callback
 
         try {
-            connectivityManager.registerNetworkCallback(request, networkCallback!!)
+            connectivityManager.registerNetworkCallback(request, callback)
         } catch (se: SecurityException) {
             try {
-                // Fallback without location info flag if permission denied
-                val fallbackHandler = object : ConnectivityManager.NetworkCallback() {
-                    override fun onAvailable(network: Network) {
-                        extractSsidFromNetwork(network)
-                        bindNetworkAndTrigger(network, isCaptiveHint = false)
-                    }
-
-                    override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
-                        extractSsidFromCapabilities(capabilities)
-                        val hasCaptive = capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_CAPTIVE_PORTAL)
-                        if (hasCaptive) {
-                            bindNetworkAndTrigger(network, isCaptiveHint = true)
-                        }
-                    }
-
-                    override fun onLost(network: Network) {
-                        CaptivePortalDetector.latestSsid = ""
-                        updateNotification("Monitoring Wi-Fi networks in background...")
-                    }
-                }
+                val fallbackHandler = createLegacyCallback()
                 networkCallback = fallbackHandler
                 connectivityManager.registerNetworkCallback(request, fallbackHandler)
             } catch (e: Exception) {
@@ -232,6 +192,50 @@ class WifiMonitorService : Service() {
             }
         } catch (e: Exception) {
             LogRepository.error("Callback Error", "Failed to register network callback: ${e.localizedMessage}")
+        }
+    }
+
+    private fun onNetworkAvailable(network: Network) {
+        LogRepository.info("Wi-Fi Connected", "Detected Wi-Fi network interface.")
+        extractSsidFromNetwork(network)
+        bindNetworkAndTrigger(network, isCaptiveHint = false)
+    }
+
+    private fun onNetworkCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
+        extractSsidFromCapabilities(capabilities)
+
+        val currentSsid = detector.getCurrentSsid().ifBlank { "Wi-Fi" }
+        val hasCaptive = capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_CAPTIVE_PORTAL)
+        val isValidated = capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+
+        if (hasCaptive) {
+            LogRepository.warning("Captive Detected", "OS detected captive portal lock on $currentSsid.")
+            bindNetworkAndTrigger(network, isCaptiveHint = true)
+        } else if (isValidated) {
+            LogRepository.success("Network Validated", "Android OS confirmed full internet access on $currentSsid (Icon verified).")
+        }
+    }
+
+    private fun onNetworkLost(network: Network) {
+        CaptivePortalDetector.latestSsid = ""
+        lastNotifiedSuccessNetwork = null
+        LogRepository.info("Wi-Fi Lost", "Disconnected from Wi-Fi.")
+        updateNotification("Monitoring Wi-Fi networks in background...")
+    }
+
+    private fun createLegacyCallback(): ConnectivityManager.NetworkCallback {
+        return object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                onNetworkAvailable(network)
+            }
+
+            override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
+                onNetworkCapabilitiesChanged(network, capabilities)
+            }
+
+            override fun onLost(network: Network) {
+                onNetworkLost(network)
+            }
         }
     }
 
@@ -821,3 +825,27 @@ class WifiMonitorService : Service() {
         }
     }
 }
+
+@RequiresApi(Build.VERSION_CODES.S)
+private object Api31NetworkCallbackHelper {
+    fun createCallback(
+        onAvailable: (Network) -> Unit,
+        onCapabilitiesChanged: (Network, NetworkCapabilities) -> Unit,
+        onLost: (Network) -> Unit
+    ): ConnectivityManager.NetworkCallback {
+        return object : ConnectivityManager.NetworkCallback(ConnectivityManager.NetworkCallback.FLAG_INCLUDE_LOCATION_INFO) {
+            override fun onAvailable(network: Network) {
+                onAvailable(network)
+            }
+
+            override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
+                onCapabilitiesChanged(network, capabilities)
+            }
+
+            override fun onLost(network: Network) {
+                onLost(network)
+            }
+        }
+    }
+}
+

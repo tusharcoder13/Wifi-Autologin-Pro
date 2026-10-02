@@ -35,9 +35,20 @@ fun WiFiAutoLoginProTheme(
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
-            val window = (view.context as Activity).window
-            window.statusBarColor = colorScheme.background.toArgb()
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = false
+            try {
+                var ctx = view.context
+                while (ctx is android.content.ContextWrapper) {
+                    if (ctx is Activity) break
+                    ctx = ctx.baseContext
+                }
+                val window = (ctx as? Activity)?.window
+                if (window != null) {
+                    window.statusBarColor = colorScheme.background.toArgb()
+                    WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = false
+                }
+            } catch (e: Exception) {
+                // Safeguard against theme or window configuration exceptions on OEM ROMs
+            }
         }
     }
 
