@@ -22,8 +22,10 @@
 -dontwarn javax.annotation.**
 -keepnames class okhttp3.internal.publicsuffix.PublicSuffixDatabase
 
-# AndroidX Security Crypto
+# AndroidX Security Crypto & Google Tink
 -keep class androidx.security.crypto.** { *; }
+-keep class com.google.crypto.tink.** { *; }
+-dontwarn com.google.crypto.tink.**
 
 # WorkManager
 -keep class androidx.work.** { *; }

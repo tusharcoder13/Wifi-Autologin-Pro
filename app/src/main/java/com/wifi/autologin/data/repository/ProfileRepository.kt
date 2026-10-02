@@ -39,8 +39,8 @@ class ProfileRepository(private val context: Context) {
                 EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
                 EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
             )
-        } catch (e: Exception) {
-            // KeyStore exception on custom OEM skins (Vivo / Oppo / Xiaomi / Custom ROMs)
+        } catch (e: Throwable) {
+            // KeyStore / Tink exception or NoClassDefFoundError on custom ROMs / Android 10 & 11
             null
         }
     }
@@ -72,8 +72,8 @@ class ProfileRepository(private val context: Context) {
         // 1. Try reading from Encrypted KeyStore store
         try {
             json = securePrefs?.getString(KEY_PROFILES, null)
-        } catch (e: Exception) {
-            // Re-initialize securePrefs if KeyStore desynced on Vivo
+        } catch (e: Throwable) {
+            // Re-initialize securePrefs if KeyStore desynced on Vivo/Android 10/11
             securePrefs = null
         }
 
@@ -81,7 +81,7 @@ class ProfileRepository(private val context: Context) {
         if (json.isNullOrBlank()) {
             try {
                 json = backupPrefs.getString(KEY_PROFILES, null)
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 json = null
             }
         }
@@ -95,7 +95,7 @@ class ProfileRepository(private val context: Context) {
 
                 // Keep both stores synchronized
                 saveProfilesInternal(sorted)
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 _profiles.value = emptyList()
             }
         } else {
@@ -286,7 +286,7 @@ class ProfileRepository(private val context: Context) {
         // 1. Save to resilient backup store (Guaranteed to succeed on all Vivo / Android devices)
         try {
             backupPrefs.edit().putString(KEY_PROFILES, json).apply()
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             // Ignore
         }
 
@@ -296,7 +296,7 @@ class ProfileRepository(private val context: Context) {
                 securePrefs = createEncryptedPreferences(context)
             }
             securePrefs?.edit()?.putString(KEY_PROFILES, json)?.apply()
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             // If KeyStore fails, backupPrefs guarantees safety
         }
     }

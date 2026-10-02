@@ -41,21 +41,25 @@ class KeepAliveWorker(
         private const val WORK_NAME = "wifi_autologin_keepalive_work"
 
         fun schedule(context: Context, intervalMinutes: Long = 15) {
-            val constraints = Constraints.Builder()
-                .setRequiredNetworkType(NetworkType.CONNECTED)
-                .build()
+            try {
+                val constraints = Constraints.Builder()
+                    .setRequiredNetworkType(NetworkType.CONNECTED)
+                    .build()
 
-            val workRequest = PeriodicWorkRequestBuilder<KeepAliveWorker>(
-                intervalMinutes.coerceAtLeast(15), TimeUnit.MINUTES
-            )
-                .setConstraints(constraints)
-                .build()
+                val workRequest = PeriodicWorkRequestBuilder<KeepAliveWorker>(
+                    intervalMinutes.coerceAtLeast(15), TimeUnit.MINUTES
+                )
+                    .setConstraints(constraints)
+                    .build()
 
-            WorkManager.getInstance(context).enqueueUniquePeriodicWork(
-                WORK_NAME,
-                ExistingPeriodicWorkPolicy.UPDATE,
-                workRequest
-            )
+                WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+                    WORK_NAME,
+                    ExistingPeriodicWorkPolicy.UPDATE,
+                    workRequest
+                )
+            } catch (e: Throwable) {
+                // Safe fallback for devices where WorkManager initialization is delayed
+            }
         }
 
         fun cancel(context: Context) {

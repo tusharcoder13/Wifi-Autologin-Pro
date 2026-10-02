@@ -12,8 +12,8 @@ class WifiAutoLoginApp : Application() {
             // Automatically start the background monitor service
             WifiMonitorService.start(this)
             KeepAliveWorker.schedule(this)
-        } catch (e: Exception) {
-            // Guard against background service startup restrictions
+        } catch (t: Throwable) {
+            // Guard against background service startup restrictions on custom Android 10/11 OEM ROMs
         }
     }
 }
