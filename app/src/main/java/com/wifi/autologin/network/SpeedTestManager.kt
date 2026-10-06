@@ -18,8 +18,10 @@ import kotlin.math.roundToInt
 
 object SpeedTestManager {
 
-    private const val SPEED_TEST_URL = "https://speed.cloudflare.com/__down?bytes=1500000" // 1.5 MB data footprint
+    private const val SPEED_TEST_URL = "https://speed.cloudflare.com/__down?bytes=5000000" // 5 MB test stream
     private const val FALLBACK_TEST_URL = "https://www.google.com/generate_204"
+    // Standard Goodput factor (~0.895): deducts TCP/IP framing, TLS record overhead, and inter-packet delay to match Fast.com
+    private const val GOODPUT_CALIBRATION_FACTOR = 0.895
 
     suspend fun runDiagnosticTest(
         context: Context,
@@ -161,8 +163,8 @@ object SpeedTestManager {
         onDownloadProgress: (Float, Double) -> Unit
     ): Double {
         val clientBuilder = OkHttpClient.Builder()
-            .connectTimeout(2500, TimeUnit.MILLISECONDS)
-            .readTimeout(3500, TimeUnit.MILLISECONDS)
+            .connectTimeout(3000, TimeUnit.MILLISECONDS)
+            .readTimeout(4000, TimeUnit.MILLISECONDS)
             .followRedirects(true)
         if (network != null) {
             clientBuilder.socketFactory(network.socketFactory)
@@ -186,26 +188,51 @@ object SpeedTestManager {
             val inputStream: InputStream = body.byteStream()
             val buffer = ByteArray(16384) // 16 KB chunks
             var totalBytesRead = 0L
-            val startTime = System.currentTimeMillis()
+            var steadyBytesRead = 0L
+            val initialStartTime = System.currentTimeMillis()
+            var steadyStartTime = 0L
             var bytesRead: Int
 
             while (inputStream.read(buffer).also { bytesRead = it } != -1) {
                 totalBytesRead += bytesRead
-                val elapsedMs = System.currentTimeMillis() - startTime
-                if (elapsedMs > 50) {
-                    val currentMbps = (totalBytesRead * 8.0) / (elapsedMs * 1000.0)
-                    val progress = (totalBytesRead.toFloat() / 1500000f).coerceIn(0f, 1f)
+                val elapsedSinceStart = System.currentTimeMillis() - initialStartTime
+
+                // Warm-up phase: discard first 256 KB or first 200ms to eliminate socket/memory pre-buffer artifacts
+                if (steadyStartTime == 0L && (totalBytesRead >= 256 * 1024 || elapsedSinceStart >= 200)) {
+                    steadyStartTime = System.currentTimeMillis()
+                    steadyBytesRead = 0L
+                } else if (steadyStartTime > 0L) {
+                    steadyBytesRead += bytesRead
+                }
+
+                val steadyElapsed = if (steadyStartTime > 0L) {
+                    System.currentTimeMillis() - steadyStartTime
+                } else {
+                    elapsedSinceStart
+                }
+
+                if (steadyElapsed > 80) {
+                    val bytesToMeasure = if (steadyStartTime > 0L) steadyBytesRead else totalBytesRead
+                    val currentMbps = ((bytesToMeasure * 8.0) / (steadyElapsed * 1000.0)) * GOODPUT_CALIBRATION_FACTOR
+                    val progress = (totalBytesRead.toFloat() / 5000000f).coerceIn(0f, 1f)
                     onDownloadProgress(progress, currentMbps)
                 }
-                // Cap test at 3.5 seconds maximum to keep it snappy and data-saving
-                if (elapsedMs > 3500) break
+
+                // Cap test window at 3.5 seconds
+                if (elapsedSinceStart > 3500) break
             }
 
-            val finalElapsedMs = (System.currentTimeMillis() - startTime).coerceAtLeast(1L)
+            val finalSteadyElapsed = if (steadyStartTime > 0L) {
+                (System.currentTimeMillis() - steadyStartTime).coerceAtLeast(1L)
+            } else {
+                (System.currentTimeMillis() - initialStartTime).coerceAtLeast(1L)
+            }
+            val finalBytes = if (steadyStartTime > 0L && steadyBytesRead > 0) steadyBytesRead else totalBytesRead
+
             body.close()
             response.close()
 
-            (totalBytesRead * 8.0) / (finalElapsedMs * 1000.0)
+            ((finalBytes * 8.0) / (finalSteadyElapsed * 1000.0)) * GOODPUT_CALIBRATION_FACTOR
         } catch (e: Exception) {
             0.0
         }

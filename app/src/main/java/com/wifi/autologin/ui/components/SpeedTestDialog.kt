@@ -39,12 +39,15 @@ fun SpeedTestDialog(
         label = "pulseScale"
     )
 
-    Dialog(onDismissRequest = {
-        if (!result.isRunning) onDismiss()
-    }) {
+    Dialog(
+        onDismissRequest = {
+            if (!result.isRunning) onDismiss()
+        },
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+    ) {
         Card(
             modifier = Modifier
-                .fillMaxWidth()
+                .fillMaxWidth(0.92f)
                 .padding(vertical = 16.dp),
             shape = RoundedCornerShape(24.dp),
             colors = CardDefaults.cardColors(containerColor = DarkSurface),
@@ -53,7 +56,7 @@ fun SpeedTestDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(22.dp),
+                    .padding(18.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
@@ -89,7 +92,7 @@ fun SpeedTestDialog(
                                 color = TextPrimaryDark
                             )
                             Text(
-                                text = "Lightweight Data-Saver Test (~1.5 MB)",
+                                text = "Real-Time Bandwidth Diagnostic",
                                 fontSize = 11.sp,
                                 color = TextSecondaryDark
                             )
@@ -218,24 +221,27 @@ fun SpeedTestDialog(
                 // Metrics Grid (Router Ping, Internet Ping, Download)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     MetricItem(
+                        modifier = Modifier.weight(1f),
                         icon = Icons.Default.Router,
                         title = "Router Ping",
                         value = if (result.gatewayLatencyMs > 0) "${result.gatewayLatencyMs} ms" else "---",
                         color = TealLight
                     )
                     MetricItem(
+                        modifier = Modifier.weight(1f),
                         icon = Icons.Default.Public,
                         title = "Internet Ping",
                         value = if (result.internetLatencyMs > 0) "${result.internetLatencyMs} ms" else "---",
                         color = if (result.internetLatencyMs in 1..80) GreenSuccess else AmberWarning
                     )
                     MetricItem(
+                        modifier = Modifier.weight(1f),
                         icon = Icons.Default.Download,
                         title = "Speed",
-                        value = if (result.downloadSpeedMbps > 0.0) "${String.format("%.1f", result.downloadSpeedMbps)} M" else "---",
+                        value = if (result.downloadSpeedMbps > 0.0) "${String.format("%.1f", result.downloadSpeedMbps)} Mbps" else "---",
                         color = TealLight
                     )
                 }
@@ -284,6 +290,7 @@ fun SpeedTestDialog(
 
 @Composable
 private fun MetricItem(
+    modifier: Modifier = Modifier,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     title: String,
     value: String,
@@ -292,10 +299,10 @@ private fun MetricItem(
     Surface(
         color = DarkBackground,
         shape = RoundedCornerShape(12.dp),
-        modifier = Modifier.width(96.dp)
+        modifier = modifier
     ) {
         Column(
-            modifier = Modifier.padding(8.dp),
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 10.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
@@ -307,14 +314,20 @@ private fun MetricItem(
             )
             Text(
                 text = value,
-                fontSize = 13.sp,
+                fontSize = if (value.length > 8) 11.sp else 12.sp,
                 fontWeight = FontWeight.Bold,
-                color = TextPrimaryDark
+                color = TextPrimaryDark,
+                maxLines = 1,
+                softWrap = false,
+                textAlign = TextAlign.Center
             )
             Text(
                 text = title,
                 fontSize = 10.sp,
-                color = TextSecondaryDark
+                color = TextSecondaryDark,
+                maxLines = 1,
+                softWrap = false,
+                textAlign = TextAlign.Center
             )
         }
     }

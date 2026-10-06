@@ -1,6 +1,6 @@
 {
-  "versionCode": 3,
-  "versionName": "3.0.0",
-  "releaseNotes": "• Kalinga-Wifi & Campus-wide universal network auto-detection\n• Dynamic active building gateway routing (zero login timeouts)\n• Live In-App Telemetry & Real-Time Install Analytics (Sheet2)\n• Dual-Layer Resilient Profile Storage (100% Vivo/Oppo/Xiaomi safe)\n• Top-bar In-App Feedback (❤️) & refined UI spacing",
+  "versionCode": 4,
+  "versionName": "4.0.0",
+  "releaseNotes": "• Live Wi-Fi Signal Quality & Link Speed on Dashboard\n• In-App Network & Bandwidth Diagnostic (Fast & Calibrated)\n• Dual-Layer Resilient Profile Storage (100% Vivo/Oppo/Xiaomi safe)\n• Real-Time Install Analytics & Compulsory Feedback Reporting\n• Kalinga-Wifi & Campus-wide universal network auto-detection",
   "downloadUrl": "https://tinyurl.com/WifiAutologin-Pro"
 }

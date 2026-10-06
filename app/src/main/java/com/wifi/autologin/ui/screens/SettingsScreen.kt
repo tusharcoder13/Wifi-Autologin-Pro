@@ -547,9 +547,9 @@ fun SettingsScreen(
         ) {
             val appVersion = remember {
                 try {
-                    context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "3.0.0"
+                    context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "4.0.0"
                 } catch (e: Exception) {
-                    "3.0.0"
+                    "4.0.0"
                 }
             }
             Text("WiFi AutoLogin Pro v$appVersion", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextMutedDark)
