@@ -24,5 +24,7 @@ data class FeedbackPayload(
     @SerializedName("ssid")
     val ssid: String = "",
     @SerializedName("timestamp")
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis(),
+    @SerializedName("formattedTime")
+    val formattedTime: String = ""
 )

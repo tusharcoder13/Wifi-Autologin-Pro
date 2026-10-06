@@ -54,6 +54,10 @@ object TelemetryManager {
             val deviceModel = if (model.startsWith(manufacturer, ignoreCase = true)) model else "$manufacturer $model"
             val androidVersion = "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})"
 
+            val sdf = java.text.SimpleDateFormat("dd-MM-yyyy hh:mm:ss a", java.util.Locale.ENGLISH)
+            sdf.timeZone = java.util.TimeZone.getTimeZone("Asia/Kolkata")
+            val formattedTime = sdf.format(java.util.Date())
+
             val payload = InstallPayload(
                 type = "install",
                 installId = installId,
@@ -61,7 +65,8 @@ object TelemetryManager {
                 deviceModel = deviceModel,
                 androidVersion = androidVersion,
                 appVersion = "3.0.0",
-                timestamp = System.currentTimeMillis()
+                timestamp = System.currentTimeMillis(),
+                formattedTime = formattedTime
             )
 
             CoroutineScope(Dispatchers.IO).launch {

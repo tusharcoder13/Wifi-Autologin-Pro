@@ -16,5 +16,7 @@ data class InstallPayload(
     @SerializedName("appVersion")
     val appVersion: String = "3.0.0",
     @SerializedName("timestamp")
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis(),
+    @SerializedName("formattedTime")
+    val formattedTime: String = ""
 )

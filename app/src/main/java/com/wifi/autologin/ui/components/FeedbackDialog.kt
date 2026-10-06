@@ -362,6 +362,10 @@ fun FeedbackDialog(
                                 messageTouched = true
                                 if (!isFormValid) return@Button
 
+                                val sdf = java.text.SimpleDateFormat("dd-MM-yyyy hh:mm:ss a", java.util.Locale.ENGLISH)
+                                sdf.timeZone = java.util.TimeZone.getTimeZone("Asia/Kolkata")
+                                val formattedTime = sdf.format(java.util.Date())
+
                                 val payload = FeedbackPayload(
                                     name = name.trim(),
                                     contact = contact.trim(),
@@ -370,7 +374,8 @@ fun FeedbackDialog(
                                     message = message.trim(),
                                     deviceModel = "${Build.MANUFACTURER} ${Build.MODEL}",
                                     androidVersion = "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})",
-                                    appVersion = "3.0.0"
+                                    appVersion = "3.0.0",
+                                    formattedTime = formattedTime
                                 )
                                 onSubmit(payload)
                                 isSubmitted = true
