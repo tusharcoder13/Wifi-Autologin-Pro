@@ -502,6 +502,68 @@ class CaptivePortalDetector(private val context: Context) {
         }
     }
 
+    data class WifiSignalInfo(
+        val rssi: Int = -127,
+        val signalPercent: Int = 0,
+        val signalQuality: String = "",
+        val linkSpeedMbps: Int = 0,
+        val frequencyBand: String = ""
+    )
+
+    fun getWifiSignalInfo(): WifiSignalInfo {
+        try {
+            var info: WifiInfo? = null
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val network = connectivityManager.activeNetwork
+                if (network != null) {
+                    val caps = connectivityManager.getNetworkCapabilities(network)
+                    if (caps != null && caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+                        val transportInfo = caps.transportInfo
+                        if (transportInfo is WifiInfo) {
+                            info = transportInfo
+                        }
+                    }
+                }
+            }
+            if (info == null || info.rssi == -127) {
+                @Suppress("DEPRECATION")
+                info = wifiManager.connectionInfo
+            }
+
+            if (info != null) {
+                val rawRssi = info.rssi
+                val rssi = if (rawRssi in -120..0) rawRssi else -65
+                val percent = ((rssi + 100) * 2).coerceIn(0, 100)
+                val quality = when {
+                    rssi >= -60 -> "Excellent"
+                    rssi >= -70 -> "Good"
+                    rssi >= -80 -> "Fair"
+                    else -> "Weak"
+                }
+
+                val speed = info.linkSpeed.coerceAtLeast(0)
+                val freq = info.frequency
+                val band = when {
+                    freq >= 5925 -> "6 GHz"
+                    freq >= 4900 -> "5 GHz"
+                    freq in 2400..2500 -> "2.4 GHz"
+                    else -> ""
+                }
+
+                return WifiSignalInfo(
+                    rssi = rssi,
+                    signalPercent = percent,
+                    signalQuality = quality,
+                    linkSpeedMbps = speed,
+                    frequencyBand = band
+                )
+            }
+        } catch (e: Exception) {
+            // Safe fallback
+        }
+        return WifiSignalInfo()
+    }
+
     companion object {
         @Volatile
         var latestSsid: String = ""

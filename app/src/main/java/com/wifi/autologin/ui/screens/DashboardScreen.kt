@@ -41,7 +41,8 @@ fun DashboardScreen(
     onNavigateToProfiles: () -> Unit,
     onNavigateToSettings: () -> Unit = {},
     onSwitchProfile: (String) -> Unit = {},
-    onFeedbackClick: () -> Unit = {}
+    onFeedbackClick: () -> Unit = {},
+    onSpeedTestClick: () -> Unit = {}
 ) {
     val scrollState = rememberScrollState()
     var showGuideDialog by remember { mutableStateOf(false) }
@@ -303,6 +304,89 @@ fun DashboardScreen(
                         title = "Latency",
                         value = if (status.pingLatencyMs > 0) "${status.pingLatencyMs} ms" else "---"
                     )
+                }
+
+                // Wi-Fi Signal Quality & Link Speed
+                if (status.state != WifiState.DISCONNECTED && (status.signalPercent > 0 || status.linkSpeedMbps > 0)) {
+                    Surface(
+                        color = DarkBackground,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 9.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Signal Quality & RSSI
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                val signalColor = when {
+                                    status.signalPercent >= 65 -> GreenSuccess
+                                    status.signalPercent >= 40 -> AmberWarning
+                                    else -> RedError
+                                }
+                                Icon(
+                                    imageVector = Icons.Default.NetworkCheck,
+                                    contentDescription = null,
+                                    tint = signalColor,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Text(
+                                    text = "Signal: ${status.signalPercent}% • ${status.signalQuality}",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = signalColor
+                                )
+                            }
+
+                            // Band & Link Speed
+                            val bandText = listOfNotNull(
+                                status.wifiFrequencyBand.takeIf { it.isNotBlank() },
+                                if (status.linkSpeedMbps > 0) "${status.linkSpeedMbps} Mbps" else null
+                            ).joinToString(" • ")
+
+                            if (bandText.isNotBlank()) {
+                                Text(
+                                    text = bandText,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = TealLight
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // 1-Tap Speed & Latency Test Button
+                if (status.state != WifiState.DISCONNECTED) {
+                    Button(
+                        onClick = onSpeedTestClick,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = DarkSurfaceVariant,
+                            contentColor = TextPrimaryDark
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Speed,
+                            contentDescription = null,
+                            tint = TealLight,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "⚡ Test Speed & Router Latency",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = TextPrimaryDark
+                        )
+                    }
                 }
 
                 // Matched Profile Info

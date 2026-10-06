@@ -54,6 +54,7 @@ class MainActivity : ComponentActivity() {
                 val updateInfo by viewModel.updateInfo.collectAsState()
                 val isCheckingUpdates by viewModel.isCheckingUpdates.collectAsState()
                 val updateCheckMessage by viewModel.updateCheckMessage.collectAsState()
+                val speedTestResult by viewModel.speedTestResult.collectAsState()
 
                 Scaffold(
                     bottomBar = {
@@ -88,7 +89,8 @@ class MainActivity : ComponentActivity() {
                                     onNavigateToProfiles = { currentTab = ScreenTab.PROFILES },
                                     onNavigateToSettings = { currentTab = ScreenTab.SETTINGS },
                                     onSwitchProfile = { profileId -> viewModel.setPrimaryProfile(profileId) },
-                                    onFeedbackClick = { showFeedbackDialog = true }
+                                    onFeedbackClick = { showFeedbackDialog = true },
+                                    onSpeedTestClick = { viewModel.runSpeedTest() }
                                 )
 
                                 ScreenTab.PROFILES -> ProfilesScreen(
@@ -143,6 +145,15 @@ class MainActivity : ComponentActivity() {
                                 onSubmit = { payload ->
                                     viewModel.submitFeedback(payload)
                                 }
+                            )
+                        }
+
+                        // Wi-Fi Speed & Diagnostic Dialog
+                        if (speedTestResult != null) {
+                            com.wifi.autologin.ui.components.SpeedTestDialog(
+                                result = speedTestResult!!,
+                                onDismiss = { viewModel.dismissSpeedTest() },
+                                onRetest = { viewModel.runSpeedTest() }
                             )
                         }
                     }

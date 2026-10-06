@@ -19,7 +19,23 @@ data class ConnectionStatus(
     val matchingProfiles: List<WifiProfile> = emptyList(),
     val isAutoLoginRunning: Boolean = false,
     val isKeepAliveActive: Boolean = false,
-    val lastLoginMessage: String = ""
+    val lastLoginMessage: String = "",
+    val rssi: Int = -127,
+    val signalPercent: Int = 0,
+    val signalQuality: String = "",
+    val linkSpeedMbps: Int = 0,
+    val wifiFrequencyBand: String = ""
+)
+
+data class SpeedTestResult(
+    val isRunning: Boolean = false,
+    val progressPercent: Float = 0f,
+    val currentStep: String = "",
+    val gatewayLatencyMs: Long = -1L,
+    val internetLatencyMs: Long = -1L,
+    val downloadSpeedMbps: Double = 0.0,
+    val rating: String = "",
+    val errorMessage: String? = null
 )
 
 data class FormDetectionResult(

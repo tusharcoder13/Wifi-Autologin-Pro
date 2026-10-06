@@ -60,6 +60,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _updateCheckMessage = MutableStateFlow<String?>(null)
     val updateCheckMessage: StateFlow<String?> = _updateCheckMessage.asStateFlow()
 
+    private val _speedTestResult = MutableStateFlow<com.wifi.autologin.data.model.SpeedTestResult?>(null)
+    val speedTestResult: StateFlow<com.wifi.autologin.data.model.SpeedTestResult?> = _speedTestResult.asStateFlow()
+
     init {
         refreshConnectionStatus()
         startLiveNetworkObserver()
@@ -161,6 +164,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 ""
             }
 
+            val signalInfo = detector.getWifiSignalInfo()
+
             _connectionStatus.value = ConnectionStatus(
                 state = probe.state,
                 ssid = realSsid,
@@ -171,7 +176,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 matchedProfile = matchedProfile,
                 matchingProfiles = matchingProfiles,
                 isAutoLoginRunning = _isLoggingIn.value,
-                isKeepAliveActive = settings.value.isKeepAliveEnabled && matchedProfile?.isKeepAliveEnabled == true
+                isKeepAliveActive = settings.value.isKeepAliveEnabled && matchedProfile?.isKeepAliveEnabled == true,
+                rssi = signalInfo.rssi,
+                signalPercent = signalInfo.signalPercent,
+                signalQuality = signalInfo.signalQuality,
+                linkSpeedMbps = signalInfo.linkSpeedMbps,
+                wifiFrequencyBand = signalInfo.frequencyBand
             )
         }
     }
@@ -342,5 +352,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch(Dispatchers.IO) {
             com.wifi.autologin.network.FeedbackManager.flushQueuedFeedback(getApplication())
         }
+    }
+
+    fun runSpeedTest() {
+        val current = _speedTestResult.value
+        if (current?.isRunning == true) return
+
+        viewModelScope.launch(Dispatchers.IO) {
+            val gateway = _connectionStatus.value.gatewayIp.ifBlank { detector.getGatewayIpAddress() }
+            com.wifi.autologin.network.SpeedTestManager.runDiagnosticTest(
+                context = getApplication(),
+                gatewayIp = gateway,
+                onProgress = { update ->
+                    _speedTestResult.value = update
+                }
+            )
+        }
+    }
+
+    fun dismissSpeedTest() {
+        _speedTestResult.value = null
     }
 }
