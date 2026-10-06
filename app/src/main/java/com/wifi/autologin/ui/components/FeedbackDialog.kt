@@ -42,6 +42,9 @@ fun FeedbackDialog(
     var selectedCategory by remember { mutableStateOf("⚡ Speed") }
     var message by remember { mutableStateOf("") }
     var isSubmitted by remember { mutableStateOf(false) }
+    var nameTouched by remember { mutableStateOf(false) }
+    var contactTouched by remember { mutableStateOf(false) }
+    var messageTouched by remember { mutableStateOf(false) }
 
     val reactions = listOf(
         "😍 Awesome",
@@ -232,38 +235,41 @@ fun FeedbackDialog(
                         }
                     }
 
-                    // Name field
+                    // Helper note
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = "* All sections are compulsory",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = TealLight
+                        )
+                    }
+
+                    val isNameValid = name.trim().isNotBlank()
+                    val isContactValid = contact.trim().length == 10
+                    val isMessageValid = message.trim().isNotBlank()
+                    val isFormValid = isNameValid && isContactValid && isMessageValid
+
+                    val isNameError = nameTouched && !isNameValid
+                    val isContactError = contactTouched && !isContactValid
+                    val isMessageError = messageTouched && !isMessageValid
+
+                    // Name field (Compulsory)
                     OutlinedTextField(
                         value = name,
-                        onValueChange = { name = it },
-                        label = { Text("Your Name", fontSize = 12.sp) },
+                        onValueChange = {
+                            name = it
+                            nameTouched = true
+                        },
+                        label = { Text("Your Name *", fontSize = 12.sp) },
                         placeholder = { Text("e.g. Rahul Sharma", fontSize = 12.sp, color = TextMutedDark) },
                         singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(10.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = TealPrimary,
-                            unfocusedBorderColor = DarkSurfaceVariant,
-                            focusedTextColor = TextPrimaryDark,
-                            unfocusedTextColor = TextPrimaryDark
-                        )
-                    )
-
-                    // Contact Number field
-                    val isContactInvalid = contact.isNotEmpty() && contact.length < 10
-                    OutlinedTextField(
-                        value = contact,
-                        onValueChange = { input ->
-                            // Only digits allowed, maximum 10 digits
-                            contact = input.filter { it.isDigit() }.take(10)
-                        },
-                        label = { Text("Contact Number", fontSize = 12.sp) },
-                        placeholder = { Text("e.g. 9876543210", fontSize = 12.sp, color = TextMutedDark) },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true,
-                        isError = isContactInvalid,
-                        supportingText = if (isContactInvalid) {
-                            { Text("Must be a 10-digit number (${contact.length}/10)", color = Color(0xFFFF6B6B), fontSize = 11.sp) }
+                        isError = isNameError,
+                        supportingText = if (isNameError) {
+                            { Text("Name is required", color = Color(0xFFFF6B6B), fontSize = 11.sp) }
                         } else null,
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(10.dp),
@@ -276,19 +282,60 @@ fun FeedbackDialog(
                         )
                     )
 
-                    // Message field
+                    // Contact Number field (Compulsory 10 digits)
                     OutlinedTextField(
-                        value = message,
-                        onValueChange = { message = it },
-                        label = { Text("Your Feedback or Suggestion", fontSize = 12.sp) },
-                        placeholder = { Text("Tell us what you like or what we should fix...", fontSize = 12.sp, color = TextMutedDark) },
-                        minLines = 3,
-                        maxLines = 5,
+                        value = contact,
+                        onValueChange = { input ->
+                            // Only digits allowed, maximum 10 digits
+                            contact = input.filter { it.isDigit() }.take(10)
+                            contactTouched = true
+                        },
+                        label = { Text("Contact Number * (10 digits)", fontSize = 12.sp) },
+                        placeholder = { Text("e.g. 9876543210", fontSize = 12.sp, color = TextMutedDark) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true,
+                        isError = isContactError,
+                        supportingText = if (isContactError) {
+                            {
+                                val msg = if (contact.isEmpty()) "Contact number is required"
+                                else "Must be exactly 10 digits (${contact.length}/10)"
+                                Text(msg, color = Color(0xFFFF6B6B), fontSize = 11.sp)
+                            }
+                        } else if (contact.isNotEmpty()) {
+                            { Text("${contact.length}/10 digits", color = if (isContactValid) TealLight else TextMutedDark, fontSize = 11.sp) }
+                        } else null,
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(10.dp),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = TealPrimary,
                             unfocusedBorderColor = DarkSurfaceVariant,
+                            errorBorderColor = Color(0xFFFF6B6B),
+                            focusedTextColor = TextPrimaryDark,
+                            unfocusedTextColor = TextPrimaryDark
+                        )
+                    )
+
+                    // Message field (Compulsory)
+                    OutlinedTextField(
+                        value = message,
+                        onValueChange = {
+                            message = it
+                            messageTouched = true
+                        },
+                        label = { Text("Your Feedback or Suggestion *", fontSize = 12.sp) },
+                        placeholder = { Text("Tell us what you like or what we should fix...", fontSize = 12.sp, color = TextMutedDark) },
+                        minLines = 3,
+                        maxLines = 5,
+                        isError = isMessageError,
+                        supportingText = if (isMessageError) {
+                            { Text("Feedback message is required", color = Color(0xFFFF6B6B), fontSize = 11.sp) }
+                        } else null,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = TealPrimary,
+                            unfocusedBorderColor = DarkSurfaceVariant,
+                            errorBorderColor = Color(0xFFFF6B6B),
                             focusedTextColor = TextPrimaryDark,
                             unfocusedTextColor = TextPrimaryDark
                         )
@@ -310,6 +357,11 @@ fun FeedbackDialog(
 
                         Button(
                             onClick = {
+                                nameTouched = true
+                                contactTouched = true
+                                messageTouched = true
+                                if (!isFormValid) return@Button
+
                                 val payload = FeedbackPayload(
                                     name = name.trim(),
                                     contact = contact.trim(),
@@ -323,17 +375,28 @@ fun FeedbackDialog(
                                 onSubmit(payload)
                                 isSubmitted = true
                             },
-                            enabled = !isContactInvalid,
+                            enabled = isFormValid,
                             modifier = Modifier.weight(1.3f),
                             shape = RoundedCornerShape(10.dp),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = TealPrimary,
-                                disabledContainerColor = DarkSurfaceVariant
+                                disabledContainerColor = DarkSurfaceVariant.copy(alpha = 0.5f),
+                                disabledContentColor = TextMutedDark
                             )
                         ) {
-                            Icon(imageVector = Icons.Default.Send, contentDescription = null, modifier = Modifier.size(15.dp))
+                            Icon(
+                                imageVector = Icons.Default.Send,
+                                contentDescription = null,
+                                modifier = Modifier.size(15.dp),
+                                tint = if (isFormValid) Color.White else TextMutedDark
+                            )
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Submit", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            Text(
+                                "Submit",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isFormValid) Color.White else TextMutedDark
+                            )
                         }
                     }
                 }

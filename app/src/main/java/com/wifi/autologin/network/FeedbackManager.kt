@@ -59,7 +59,12 @@ object FeedbackManager {
     }
 
     suspend fun submitFeedback(context: Context, payload: FeedbackPayload): Boolean = withContext(Dispatchers.IO) {
-        val nameLabel = payload.name.ifBlank { "Anonymous" }
+        if (payload.name.isBlank() || payload.contact.isBlank() || payload.message.isBlank() || payload.contact.length != 10) {
+            LogRepository.warning("Feedback Error", "Feedback rejected: Name, 10-digit contact number, and message are compulsory.")
+            return@withContext false
+        }
+
+        val nameLabel = payload.name.trim()
         LogRepository.info("Feedback", "Submitting feedback from $nameLabel (${payload.reaction})...")
 
         // First attempt direct send (works if phone has internet or active cellular data)
